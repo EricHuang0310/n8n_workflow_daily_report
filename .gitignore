@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+*.pyo
+daily_report/CustomerServiceLog_*.xlsx

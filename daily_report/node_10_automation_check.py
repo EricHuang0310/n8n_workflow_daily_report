@@ -69,20 +69,29 @@ def extract(execution: dict) -> dict | None:
     action = _determine_action(run_data)
     is_automatable = action in AUTOMATABLE_ACTIONS if action else None
 
-    # 停留時間: 從 automation_router 到最終回覆
+    # automation_router 節點本身的執行時間
     exec_time_ms = get_node_execution_time(run_data, "automation_router")
 
     # 取得 session 資訊
     extract_output = get_node_output(run_data, "extract_intent")
     session_id = extract_output.get("sessionID") if extract_output else None
 
-    # 取得最終 metadata
+    # 取得最終 metadata 與最終節點名稱 (用於計算停留時間)
     final_output = None
+    final_node_name = None
     for resp_node in ["SMS_response", "live_support_response1",
                        "live_support_response2", "IVR_response"]:
         if node_was_executed(run_data, resp_node):
             final_output = get_node_output(run_data, resp_node)
+            final_node_name = resp_node
             break
+
+    # 停留時間: 從 automation_router 到最終回覆節點
+    stay_duration_sec = None
+    if final_node_name:
+        stay_duration_sec = calc_node_duration_seconds(
+            run_data, "automation_router", final_node_name
+        )
 
     return {
         "node": "10.是否可自動化處理",
@@ -91,6 +100,7 @@ def extract(execution: dict) -> dict | None:
         "action": action,
         "is_automatable": is_automatable,
         "subsequent_action_detail": final_output.get("metadata") if final_output else None,
+        "stay_duration_sec": stay_duration_sec,
         "execution_time_ms": exec_time_ms,
     }
 
@@ -104,13 +114,21 @@ def aggregate(records: list[dict]) -> dict:
 
     # 各 action 統計
     action_dist = {}
+    total_stay_sec = 0.0
+    stay_count = 0
     for r in valid:
         act = r.get("action", "unknown")
         action_dist[act] = action_dist.get(act, 0) + 1
+        if r.get("stay_duration_sec") is not None:
+            total_stay_sec += r["stay_duration_sec"]
+            stay_count += 1
 
     return {
         "report_item": "10.是否可自動化處理",
         "total_count": len(valid),
+        "avg_stay_duration_sec": (
+            round(total_stay_sec / stay_count, 3) if stay_count else None
+        ),
         "automatable_count": automatable,
         "non_automatable_count": non_automatable,
         "action_distribution": action_dist,
