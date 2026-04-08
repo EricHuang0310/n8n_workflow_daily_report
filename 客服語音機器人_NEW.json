@@ -1,0 +1,2576 @@
+{
+  "name": "客服語音機器人_NEW",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 8. 理解問題\n",
+        "height": 224,
+        "width": 192,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2384,
+        1056
+      ],
+      "typeVersion": 1,
+      "id": "10943805-38d9-41ae-add2-df87736b5214",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "user",
+              "message": "={{ $('receive_message_API').item.json.body.text }}"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -2656,
+        1184
+      ],
+      "id": "b566373b-20cf-4836-af80-b3c1deafb4fa",
+      "name": "save_query"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://10.13.60.113:5670/webhook/intentIdentification",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "session_id",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $('receive_message_API').item.json.body.text }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -2352,
+        1184
+      ],
+      "id": "9c5397b3-45ad-4220-a984-2da93eae79c1",
+      "name": "intent_identification",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "customerService_1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2848,
+        1184
+      ],
+      "id": "c01004bd-0bae-4e85-9930-0ba86652a0fd",
+      "name": "receive_message_API",
+      "webhookId": "bc13f4b1-d2a1-42fc-b2c9-60766a74da6c"
+    },
+    {
+      "parameters": {
+        "content": "## /webhook/customerService\n台新腦客服 API",
+        "height": 256,
+        "width": 304,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2912,
+        1056
+      ],
+      "typeVersion": 1,
+      "id": "7a713fd9-c207-44b9-b397-48afc602a90e",
+      "name": "Sticky Note12"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('receive_message_API').item.json.body.sessionID}}",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -832,
+        1968
+      ],
+      "id": "e64472a1-22c9-4c94-95d5-c816674955f1",
+      "name": "message_memory"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "=transfer_auth",
+              "type": "string"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "=audioFile",
+              "value": "[\"VBot_VerifyID_Agent.wav\"]",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": \"10154\", \n  \"callType\": \"a\",\n  \"voiceCommand\": null, \n  \"resumeUrl\": null \n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2000,
+        1408
+      ],
+      "id": "44cdaad1-8091-4658-9289-cc5feca70a10",
+      "name": "error_to_human"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1776,
+        1408
+      ],
+      "id": "5dacdf24-8d59-45df-a867-417956b099d6",
+      "name": "return_error_to_human"
+    },
+    {
+      "parameters": {
+        "content": "## 節點發生ERROR\n直接進入動作12.轉接真人客服\n",
+        "height": 144,
+        "width": 496,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2080,
+        1296
+      ],
+      "typeVersion": 1,
+      "id": "d52c0514-ea61-4878-8e86-4f249fe26987",
+      "name": "Sticky Note15"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hangUp_1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2672,
+        464
+      ],
+      "id": "1821d4c3-cb9c-4ad6-b4e5-f57919461426",
+      "name": "clear_history_API",
+      "webhookId": "bc13f4b1-d2a1-42fc-b2c9-60766a74da6c"
+    },
+    {
+      "parameters": {
+        "mode": "delete",
+        "deleteMode": "all"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -2368,
+        464
+      ],
+      "id": "8faca352-d917-41db-a3cc-9fef2f06a45e",
+      "name": "clear_message"
+    },
+    {
+      "parameters": {
+        "mode": "delete",
+        "deleteMode": "all"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -2032,
+        464
+      ],
+      "id": "05488260-4015-493a-9e21-bd1f62118f51",
+      "name": "clear_message1"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('clear_history_API').item.json.body.sessionID }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -2448,
+        656
+      ],
+      "id": "faa63f03-50c4-41d2-93f7-1237f946075f",
+      "name": "message_memory1"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('clear_history_API').item.json.body.sessionID }}_count"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -2064,
+        672
+      ],
+      "id": "fd2c97b3-599a-4046-9eb0-38bf9395114c",
+      "name": "negative_count_memory1"
+    },
+    {
+      "parameters": {
+        "content": "## /webhook/hangUp\n清除歷史對話",
+        "height": 256,
+        "width": 304,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2768,
+        336
+      ],
+      "typeVersion": 1,
+      "id": "c1ae7caa-034e-4811-97b8-3de16edd96a9",
+      "name": "Sticky Note11"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "dbc701d2-15ad-4420-8d94-557c311147e2",
+              "name": "=intent",
+              "value": "={{ $('intent_identification').item.json.output.map(item => item.intent) }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2128,
+        1008
+      ],
+      "id": "056207ce-494a-4ee7-9bfd-0629145ea525",
+      "name": "extract_intent"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7dc23dd4-8101-4d19-bd24-db57c71a3642",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "={{null}}",
+              "type": "object"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "={{ $('intent_identification').item.json.output[0].intentAudioMsg }}",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ {  \n\"scriptNo\": null, \n\"callType\": null,\n\"voiceCommand\":  null, \n\"resumeUrl\": $execution.resumeUrl.split('/').slice(-2).join('/') \n} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1600,
+        1008
+      ],
+      "id": "f4fa6376-3b17-482f-b934-80206db9d9e5",
+      "name": "set_confirm_response"
+    },
+    {
+      "parameters": {
+        "content": "## 9. 與客戶確認問題\n",
+        "height": 224,
+        "width": 192,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1376,
+        864
+      ],
+      "typeVersion": 1,
+      "id": "70ddc705-19d7-49ff-b1f5-89fec185e3fe",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1152,
+        1184
+      ],
+      "id": "c5b5a382-69d4-45fc-a9b9-ed437276ae88",
+      "name": "receive_confirmation",
+      "webhookId": "5e9c8d09-615f-4917-897a-11e26d6f6439"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -1328,
+        1008
+      ],
+      "id": "7d1e82a6-c5f5-492f-a823-9c01acf1a234",
+      "name": "return_confirm"
+    },
+    {
+      "parameters": {
+        "x-company": "TSH",
+        "x-system-id": "N8N",
+        "x-service-id": "N8N",
+        "x-api-key": "fc1a186382f3d0c5f53361f6fec591a9b8d6e348b5841260b745cc97005fbbbf",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.LmChatTaishin",
+      "typeVersion": 1,
+      "position": [
+        208,
+        1376
+      ],
+      "id": "87fadb87-28f0-4f2a-ba55-04c996a050cb",
+      "name": "Taishin Chat Model"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n\t\"selected_intent\": \"意圖名稱或 negative 或 other\"\n}\n\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        432,
+        1376
+      ],
+      "id": "1da87785-5b9c-42e7-8b84-94a28d1fafe4",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "content": "## 問題模糊程度\n判斷問題為明確或模糊\n明確： 1個意圖\n模糊：3個意圖",
+        "height": 208,
+        "width": 640,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        144,
+        1056
+      ],
+      "typeVersion": 1,
+      "id": "eb9882da-260c-4137-a7ad-6e043ba2c227",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=### 角色\n你是一個專業的對話意圖分類專家。你的任務是分析使用者的「回覆」，並從提供的選項中選擇最符合的意圖。\n\n### 使用者回覆\n{{ $json.confirm_query }}\n\n### 待分類的意圖列表 (Candidate Intents)\n{{ $('extract_intent').item.json.intent }}\n\n### 分類規則\n請根據以下邏輯進行嚴格分類，並僅從中挑選一個標籤：\n\n1. **優先比對意圖列表**：\n   - 如果使用者的回覆明確符合「意圖列表」中的某項內容（語意相同、選擇數字、或提及關鍵字），請回傳該意圖名稱。\n\n2. **標記為 positive (正向/肯定/確認)**：\n   - 使用者表達：同意、確認事實、接受建議、正確、允許進行下一步。\n   - 使用者對之前的建議表示肯定或同意。\n\n3. **標記為 negative (反向/否定/拒絕)**：\n   - 使用者表達：不對、不是這個、我不要、不用了、不感興趣、你弄錯了、不是我要問其他問題。\n   - 使用者對之前的建議表示反對或否定。\n\n4. **標記為 other (不確定/無關/雜訊)**：\n   - **招呼語**：你好、哈囉、在嗎？\n   - **語意不明/詢問無關問題**：聽不懂、重說一次、你在說什麼？、今天天氣怎樣？、你是誰？\n   - **猶豫/需要考慮**：我再想想、等一下、先不要、考慮看看、再看看。\n\n### 輸出格式\n請務必僅回傳 JSON 格式，不要包含額外的解釋或 Markdown 語法，格式如下：\n{\n  \"selected_intent\": \"意圖名稱或 negative 或 other\",\n}",
+        "hasOutputParser": true
+      },
+      "id": "2a915c16-a5d3-4301-9d34-e673cf767751",
+      "name": "ambiguous_intent_analyze",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        224,
+        1184
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "={{ $('extract_intent').item.json.intent }}"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -1936,
+        1008
+      ],
+      "id": "b1c34a33-1742-42a5-915c-ff41bffcb6a7",
+      "name": "save_intent"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.selected_intent }}",
+                    "rightValue": "negative",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "558bcc2a-2528-4063-966f-a0ba47e7568d"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "negative"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1ed173ea-5781-4189-b158-ca2a23b51914",
+                    "leftValue": "={{ $json.output.selected_intent }}",
+                    "rightValue": "other",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "other"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        592,
+        1168
+      ],
+      "id": "7abdd2a1-bfe7-49e6-9d97-fa749318e149",
+      "name": "ambiguity_router"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9360f1b5-f6fe-4876-b068-78a200fe7978",
+              "name": "metadata",
+              "value": "={{ $('intent_identification').item.json.output[Number($('get_callType').item.json.callType_index)] }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1056,
+        1984
+      ],
+      "id": "70b2dd3b-8778-41b5-8e0e-daa22d3f69d1",
+      "name": "positive_metadata"
+    },
+    {
+      "parameters": {
+        "content": "## 10. 是否可以自動化處理\n從 action 做判斷",
+        "height": 832,
+        "width": 688,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1296,
+        1824
+      ],
+      "typeVersion": 1,
+      "id": "634447d7-a64c-485a-b4cc-90733657a083",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ \n({\n  \"不核身轉接專員\": \"transfer_direct\",\n  \"核身後轉接專員\": \"transfer_auth\",\n  \"核身後轉接語音功能\": \"transfer_ivr_auth\",\n  \"發訊息\": \"send_message\"\n})[$('positive_metadata').item.json.metadata.subsequentActions] || null \n}}",
+                    "rightValue": "send_message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "1aed102f-7ab8-4e56-81c0-961232107212"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SMS"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "459bc383-da08-4ebe-8dca-49a14fc08722",
+                    "leftValue": "={{ \n({\n  \"不核身轉接專員\": \"transfer_direct\",\n  \"核身後轉接專員\": \"transfer_auth\",\n  \"核身後轉接語音功能\": \"transfer_ivr_auth\",\n  \"發訊息\": \"send_message\"\n})[$('positive_metadata').item.json.metadata.subsequentActions] || null \n}}",
+                    "rightValue": "transfer_direct",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "to_human"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "0ffd3345-b8a6-4901-85bf-5c60838a3547",
+                    "leftValue": "={{ \n({\n  \"不核身轉接專員\": \"transfer_direct\",\n  \"核身後轉接專員\": \"transfer_auth\",\n  \"核身後轉接語音功能\": \"transfer_ivr_auth\",\n  \"發訊息\": \"send_message\"\n})[$('positive_metadata').item.json.metadata.subsequentActions] || null \n}}",
+                    "rightValue": "transfer_auth",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "to_human_auth"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c7a8f31e-d02a-4df1-a90b-0f4a9786d1aa",
+                    "leftValue": "={{ \n({\n  \"不核身轉接專員\": \"transfer_direct\",\n  \"核身後轉接專員\": \"transfer_auth\",\n  \"核身後轉接語音功能\": \"transfer_ivr_auth\",\n  \"發訊息\": \"send_message\"\n})[$('positive_metadata').item.json.metadata.subsequentActions] || null \n}}",
+                    "rightValue": "=transfer_ivr_auth",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "to_ivr"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1392,
+        1952
+      ],
+      "id": "ce8bfaf2-1666-41eb-bfd1-08272d9149ab",
+      "name": "automation_router"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2080,
+        2496
+      ],
+      "id": "564346fe-2f3e-4fce-bf86-0721e7bcf9db",
+      "name": "return_IVR"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2080,
+        2320
+      ],
+      "id": "6cac31a8-7743-4300-b254-c7617f5085e8",
+      "name": "return_live_support2"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2080,
+        2144
+      ],
+      "id": "45b2b106-396f-4f55-adc3-4f5b3beb351b",
+      "name": "return_live_support1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "=transfer_ivr_auth",
+              "type": "string"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "={{ [$('positive_metadata').item.json.metadata.standardAudio] }}",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": $('positive_metadata').item.json.metadata.transferSpecialist, \n  \"callType\": $('positive_metadata').item.json.metadata.intent,\n  \"voiceCommand\": $('positive_metadata').item.json.metadata.transferFunction, \n  \"resumeUrl\": null \n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        2496
+      ],
+      "id": "a0401b29-e713-4beb-ae15-39dbfdf4ff76",
+      "name": "IVR_response"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "=transfer_auth",
+              "type": "string"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "={{ [$('positive_metadata').item.json.metadata.standardAudio] }}",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": $('positive_metadata').item.json.metadata.transferSpecialist, \n  \"callType\": $('positive_metadata').item.json.metadata.intent,\n  \"voiceCommand\": $('positive_metadata').item.json.metadata.transferFunction, \n  \"resumeUrl\": null \n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        2320
+      ],
+      "id": "b5666d6d-5b64-46ec-9958-de4818edc068",
+      "name": "live_support_response2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "=transfer_direct",
+              "type": "string"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "={{ [$('positive_metadata').item.json.metadata.standardAudio] }}",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": $('positive_metadata').item.json.metadata.transferSpecialist, \n  \"callType\": $('positive_metadata').item.json.metadata.intent,\n  \"voiceCommand\": $('positive_metadata').item.json.metadata.transferFunction, \n  \"resumeUrl\": null \n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        2144
+      ],
+      "id": "fdaff46d-4a72-4a24-a23f-c9c135bcb07f",
+      "name": "live_support_response1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "=send_message",
+              "type": "string"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "={{ [$('positive_metadata').item.json.metadata.standardAudio] }}",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": $('positive_metadata').item.json.metadata.transferSpecialist, \n  \"callType\": $('positive_metadata').item.json.metadata.intent,\n  \"voiceCommand\": $('positive_metadata').item.json.metadata.transferFunction, \n  \"resumeUrl\": null \n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        1936
+      ],
+      "id": "997991f3-75d1-44a6-bc08-03f8f3ff61fb",
+      "name": "SMS_response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2080,
+        1936
+      ],
+      "id": "bdf89a8b-e674-4aad-ac13-205808a2dfd0",
+      "name": "return_SMS"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "negative"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        864
+      ],
+      "id": "bcaa1ecf-2aeb-4a89-a74e-d3cef3fd4be1",
+      "name": "save_negative_count"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        1280,
+        864
+      ],
+      "id": "ab23f2a9-b1aa-4950-9f59-5d48dc3a857b",
+      "name": "get_negative_count"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('receive_message_API').item.json.body.sessionID }}_count"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1136,
+        1072
+      ],
+      "id": "bddcd6b8-bfee-494e-852a-31c207b9c3b9",
+      "name": "negative_count_memory"
+    },
+    {
+      "parameters": {
+        "content": "## 問題理解錯誤處理，計算負面回覆次數\n第一次，請客戶簡單說明問題\n第二次，轉接專員\n",
+        "height": 224,
+        "width": 624,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        912,
+        736
+      ],
+      "typeVersion": 1,
+      "id": "c19ff7be-de8a-4731-86df-e29b9a707fd4",
+      "name": "Sticky Note13"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.messagesCount }}",
+                    "rightValue": 1,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    },
+                    "id": "d0ac4f7c-740e-4bd2-833c-c8bdd3d14bd1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "repeat_query"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5f784268-a142-437d-abf7-374658c62d68",
+                    "leftValue": "={{ $json.messagesCount }}",
+                    "rightValue": 2,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "to_human"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1664,
+        864
+      ],
+      "id": "7c5aff8b-57e9-4ae5-80d7-1e9204436252",
+      "name": "negative_count_router"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. 取得相關節點的資料\nconst routerOutput = $('ambiguity_router').item.json.output;\nconst intentIdentificationOutput = $('intent_identification').item.json.output;\n\n// 2. 預先處理意圖清單（轉換成字串陣列）\nconst intentNames = intentIdentificationOutput.map(item => item.intent);\n\n// 3. 計算 callType\nlet callType;\nif (routerOutput.selected_intent === 'positive') {\n    // 如果是 positive，抓取意圖辨識清單的第一個元素\n    callType = intentNames[0];\n} else {\n    // 否則直接使用選中的意圖 (如 negative, other)\n    callType = routerOutput.selected_intent;\n}\n\n// 4. 計算 callType_index\n// 注意：如果 callType 是 'negative' 且不在 intentNames 中，結果會是 -1\nconst callType_index = intentNames.indexOf(callType);\n\n// 5. 回傳結果給下一個節點\nreturn {\n  callType: callType,\n  callType_index: callType_index\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        1984
+      ],
+      "id": "b66d381b-4dcf-4440-b192-bccb8622b293",
+      "name": "get_callType"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "={{ null }}",
+              "type": "object"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "=[\"很抱歉，請您再簡單說出您的問題.wav\"]",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": null, \n  \"callType\": null,\n  \"voiceCommand\": null, \n  \"resumeUrl\": $('receive_message_API').item.json.webhookUrl.split('/').slice(-2).join('/')\n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2272,
+        848
+      ],
+      "id": "d2c8e408-5b2e-4431-9d4e-7cbd47359efc",
+      "name": "negative_response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2576,
+        848
+      ],
+      "id": "9e5fb480-811d-43d1-9fcc-c335a5a5e6ad",
+      "name": "return_negative"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "=transfer_auth",
+              "type": "string"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "=[\"VBot_VerifyID_Agent.wav\"]",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": \"10154\", \n  \"callType\": $('extract_intent').item.json.intent,\n  \"voiceCommand\": null, \n  \"resumeUrl\": null \n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2256,
+        1072
+      ],
+      "id": "463964f9-368f-42fd-b384-cba9a884553c",
+      "name": "negative_response_to_human"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2560,
+        1072
+      ],
+      "id": "803fc72f-5983-426f-9687-0e0072b4a522",
+      "name": "retrun_negative_to_human"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "={{ null }}",
+              "type": "object"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "={{ $('set_confirm_response').item.json.audioFile }}",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": null, \n  \"callType\": null,\n  \"voiceCommand\": null, \n  \"resumeUrl\": $execution.resumeUrl.split('/').slice(-2).join('/')\n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2016,
+        1472
+      ],
+      "id": "dcb1dc03-8c08-4003-9d9a-5f17cc074837",
+      "name": "other_response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2224,
+        1472
+      ],
+      "id": "6712dc1a-370f-4928-967a-bd1feb70e494",
+      "name": "return_other"
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2432,
+        1472
+      ],
+      "id": "b7d9ebe9-65e8-4523-9875-03448ed807fc",
+      "name": "receive_confirmation_again",
+      "webhookId": "5e9c8d09-615f-4917-897a-11e26d6f6439"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "98a97579-621b-4b5e-ab39-42bebd82d8e4",
+              "name": "confirm_query",
+              "value": "={{ $json.body.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2624,
+        1472
+      ],
+      "id": "1ae04e57-5e74-426d-abea-f3ca43df76b7",
+      "name": "set_confirm_again"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "user",
+              "message": "={{ $json.body.text }}"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -896,
+        1184
+      ],
+      "id": "b4bd3646-be19-4d2d-9f28-19a1d2a3a28b",
+      "name": "save_test"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -592,
+        1184
+      ],
+      "id": "9ac8aac3-7dde-4b93-b608-eb9411984674",
+      "name": "get_test"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1f22002f-ab1a-4f81-96dd-c6eca181409b",
+              "name": "confirm_query",
+              "value": "={{ $('receive_confirmation').item.json.body.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -160,
+        1184
+      ],
+      "id": "d67e64dd-e5d9-4d36-ac6f-d2e5f1b7be50",
+      "name": "set_confirm"
+    },
+    {
+      "parameters": {
+        "content": "## 計算其他回覆次數\n第一次，重新播放意圖\n第二次，轉接專員\n",
+        "height": 224,
+        "width": 624,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        896,
+        1216
+      ],
+      "typeVersion": 1,
+      "id": "1c5fe480-d7c9-424a-b02a-92eadbce1459",
+      "name": "Sticky Note14"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "other"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        944,
+        1344
+      ],
+      "id": "71770c37-4373-4cd3-96b4-fa647d9f9e81",
+      "name": "save_other_count"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('receive_message_API').item.json.body.sessionID }}_other_count"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        1552
+      ],
+      "id": "8d30174a-bac6-4cae-ba54-3b95c6eaddec",
+      "name": "other_count_memory"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        1264,
+        1344
+      ],
+      "id": "dc25ed34-3e9b-450f-b8f5-23ea8989b7af",
+      "name": "get_other_count"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5f784268-a142-437d-abf7-374658c62d68",
+                    "leftValue": "={{ $json.messagesCount }}",
+                    "rightValue": 2,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "to_human"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.messagesCount }}",
+                    "rightValue": 1,
+                    "operator": {
+                      "type": "number",
+                      "operation": "equals"
+                    },
+                    "id": "d0ac4f7c-740e-4bd2-833c-c8bdd3d14bd1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "repeat_query"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1584,
+        1344
+      ],
+      "id": "7be8027b-b8b7-4c28-8e7b-4766c646118c",
+      "name": "other_count_router"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "20d159a8-9209-413e-bfd9-80dad0ac5b6d",
+              "name": "sessionID",
+              "value": "={{ $('receive_message_API').item.json.body.sessionID }}",
+              "type": "string"
+            },
+            {
+              "id": "47cafa50-37aa-4902-b709-0cbe9bd0ffe6",
+              "name": "customerID",
+              "value": "={{ $('receive_message_API').item.json.body.customerID }}",
+              "type": "string"
+            },
+            {
+              "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+              "name": "action",
+              "value": "=transfer_auth",
+              "type": "string"
+            },
+            {
+              "id": "6abb2fe2-502e-4af9-b11c-739d88bb7390",
+              "name": "audioFile",
+              "value": "=[\"VBot_VerifyID_Agent.wav\"]",
+              "type": "array"
+            },
+            {
+              "id": "230d7171-f3b1-403c-9e9e-359d571bdc78",
+              "name": "isInterrupt",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "977394ef-d16a-42ea-a25b-41d4a480bb3f",
+              "name": "metadata",
+              "value": "={{ ({ \n  \"scriptNo\": \"10154\", \n  \"callType\": $('extract_intent').item.json.intent,\n  \"voiceCommand\": null, \n  \"resumeUrl\": null \n}) }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2016,
+        1264
+      ],
+      "id": "43de09a7-36fb-45e5-8698-04efa4b12435",
+      "name": "other_response_to_human"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2304,
+        1264
+      ],
+      "id": "a9149389-78de-4c64-9891-16a05eff0ff1",
+      "name": "retrun_other_to_human"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('clear_history_API').item.json.body.sessionID }}_other_count"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -1696,
+        672
+      ],
+      "id": "c266e4d1-ec18-4f05-a9a2-ac3b6651171b",
+      "name": "other_count_memory1"
+    },
+    {
+      "parameters": {
+        "mode": "delete",
+        "deleteMode": "all"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        -1664,
+        464
+      ],
+      "id": "d52942bd-ac60-49ca-a802-f7b2acf9d2c0",
+      "name": "clear_message2"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "很抱歉，請您再簡單說出您的問題"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        2928,
+        848
+      ],
+      "id": "da5cf543-6490-4232-8108-decc81a0d56d",
+      "name": "repeat_query_response"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "=將為您轉接專員，轉接前將與您進行身分驗證"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        2944,
+        1072
+      ],
+      "id": "f466ffa2-10a3-4b7f-9e44-0223e7629439",
+      "name": "to_human_response"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "={{ $('extract_intent').item.json.intent }}"
+            },
+            {
+              "type": "user",
+              "message": "={{ $json.confirm_query }}"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        2832,
+        1472
+      ],
+      "id": "93fec1de-a232-4621-9fab-51504b4e1a29",
+      "name": "save_other"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        3168,
+        1472
+      ],
+      "id": "039c576f-7562-4755-8ad3-8cf75d87d051",
+      "name": "get_otehr"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('receive_message_API').item.json.body.sessionID}}",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        3136,
+        1360
+      ],
+      "id": "5a8fc91b-dffe-4643-a5f9-5adcfaefd22c",
+      "name": "response_message_memory"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "=將為您轉接專員，轉接前將與您進行身分驗證"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        2544,
+        1264
+      ],
+      "id": "d11a51d2-4236-4982-879a-2ae9c3be7e4f",
+      "name": "other_to_human_response"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('receive_message_API').item.json.body.sessionID}}",
+        "contextWindowLength": 15
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        2560,
+        2800
+      ],
+      "id": "af327fd9-52cc-44f5-a8b2-7ea74ebb3a77",
+      "name": "positive_message_memory"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "={{ $('positive_metadata').item.json.metadata.standardAnswer }}"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        2160
+      ],
+      "id": "40328ab0-eeb0-4519-bd9c-c94bf537dd79",
+      "name": "save_live_support"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "={{ $('positive_metadata').item.json.metadata.standardAnswer }}"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        2368
+      ],
+      "id": "a8afcf6f-db99-4510-8222-44c584bb9eb4",
+      "name": "save_live_support1"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "ai",
+              "message": "={{ $('positive_metadata').item.json.metadata.standardAnswer }}"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryManager",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        2592
+      ],
+      "id": "08aea92e-49c9-4817-9c84-8ba5b82018e6",
+      "name": "save_IVR"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "save_query": {
+      "main": [
+        [
+          {
+            "node": "intent_identification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "receive_message_API": {
+      "main": [
+        [
+          {
+            "node": "save_query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "message_memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "save_query",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "save_intent",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "save_test",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "get_test",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "save_other",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "get_otehr",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "error_to_human": {
+      "main": [
+        [
+          {
+            "node": "return_error_to_human",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "intent_identification": {
+      "main": [
+        [
+          {
+            "node": "extract_intent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "error_to_human",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "clear_history_API": {
+      "main": [
+        [
+          {
+            "node": "clear_message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "clear_message": {
+      "main": [
+        [
+          {
+            "node": "clear_message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "message_memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "clear_message",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "negative_count_memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "clear_message1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract_intent": {
+      "main": [
+        [
+          {
+            "node": "save_intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_confirm_response": {
+      "main": [
+        [
+          {
+            "node": "return_confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "return_confirm": {
+      "main": [
+        [
+          {
+            "node": "receive_confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Taishin Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ambiguous_intent_analyze",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "ambiguous_intent_analyze",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "receive_confirmation": {
+      "main": [
+        [
+          {
+            "node": "save_test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ambiguous_intent_analyze": {
+      "main": [
+        [
+          {
+            "node": "ambiguity_router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ambiguity_router": {
+      "main": [
+        [
+          {
+            "node": "save_negative_count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "save_other_count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "get_callType",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_intent": {
+      "main": [
+        [
+          {
+            "node": "set_confirm_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "positive_metadata": {
+      "main": [
+        [
+          {
+            "node": "automation_router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "automation_router": {
+      "main": [
+        [
+          {
+            "node": "SMS_response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "live_support_response1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "live_support_response2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IVR_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IVR_response": {
+      "main": [
+        [
+          {
+            "node": "return_IVR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "live_support_response2": {
+      "main": [
+        [
+          {
+            "node": "return_live_support2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "live_support_response1": {
+      "main": [
+        [
+          {
+            "node": "return_live_support1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS_response": {
+      "main": [
+        [
+          {
+            "node": "return_SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_negative_count": {
+      "main": [
+        [
+          {
+            "node": "get_negative_count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "negative_count_memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "save_negative_count",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "get_negative_count",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_negative_count": {
+      "main": [
+        [
+          {
+            "node": "negative_count_router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_callType": {
+      "main": [
+        [
+          {
+            "node": "positive_metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "negative_count_router": {
+      "main": [
+        [
+          {
+            "node": "negative_response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "negative_response_to_human",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "negative_response": {
+      "main": [
+        [
+          {
+            "node": "return_negative",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "negative_response_to_human": {
+      "main": [
+        [
+          {
+            "node": "retrun_negative_to_human",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "other_response": {
+      "main": [
+        [
+          {
+            "node": "return_other",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "return_other": {
+      "main": [
+        [
+          {
+            "node": "receive_confirmation_again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "receive_confirmation_again": {
+      "main": [
+        [
+          {
+            "node": "set_confirm_again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_confirm_again": {
+      "main": [
+        [
+          {
+            "node": "save_other",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_test": {
+      "main": [
+        [
+          {
+            "node": "get_test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_test": {
+      "main": [
+        [
+          {
+            "node": "set_confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_confirm": {
+      "main": [
+        [
+          {
+            "node": "ambiguous_intent_analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_other_count": {
+      "main": [
+        [
+          {
+            "node": "get_other_count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "other_count_memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "save_other_count",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "get_other_count",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_other_count": {
+      "main": [
+        [
+          {
+            "node": "other_count_router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "other_count_router": {
+      "main": [
+        [
+          {
+            "node": "other_response_to_human",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "other_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "other_response_to_human": {
+      "main": [
+        [
+          {
+            "node": "retrun_other_to_human",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "clear_message1": {
+      "main": [
+        [
+          {
+            "node": "clear_message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "other_count_memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "clear_message2",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "return_negative": {
+      "main": [
+        [
+          {
+            "node": "repeat_query_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "retrun_negative_to_human": {
+      "main": [
+        [
+          {
+            "node": "to_human_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "save_other": {
+      "main": [
+        [
+          {
+            "node": "get_otehr",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_otehr": {
+      "main": [
+        [
+          {
+            "node": "ambiguous_intent_analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "retrun_other_to_human": {
+      "main": [
+        [
+          {
+            "node": "other_to_human_response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response_message_memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "repeat_query_response",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "to_human_response",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "other_to_human_response",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "return_live_support1": {
+      "main": [
+        [
+          {
+            "node": "save_live_support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "return_live_support2": {
+      "main": [
+        [
+          {
+            "node": "save_live_support1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "return_IVR": {
+      "main": [
+        [
+          {
+            "node": "save_IVR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "positive_message_memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "save_live_support",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "save_live_support1",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "save_IVR",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9b89ed54-8a54-4839-a08d-d3639c53182b",
+  "meta": {
+    "instanceId": "fe26821710278485f22df0b81a3eabf417c0386d449cacfa06eb7232055bce44"
+  },
+  "id": "ygbkkaIFbW8APfD1",
+  "tags": []
+}
