@@ -1,19 +1,16 @@
 """
 pipeline.py - 客服語音機器人 日報表產生器
 ==========================================
-整合所有報表項目模組，從 n8n execution log 產出每日報表。
+整合所有報表項目模組，從 n8n execution log 產出每日 Excel 報表。
 
 使用方式:
-  python pipeline.py <execution_log.json> [--output report_output.json]
+  python pipeline.py <execution_log.json> [--output report_output.xlsx]
 
-輸出格式: JSON (結構化且便於後續分析與視覺化)
-選擇 JSON 而非 CSV 的原因:
-  - 報表包含巢狀結構 (意圖分布、錯誤詳情、客戶查詢列表等)
-  - 各節點指標維度不同，CSV 難以表達
-  - JSON 易於與前端 Dashboard 或 BI 工具對接
+輸出格式: Excel (.xlsx)
+  - Sheet 1 「總覽」: 報表 metadata + 各節點 / 例外情境的彙總指標
+  - Sheet 2..N: 每個報表模組獨立一張明細 Sheet (一列一筆 execution)
 """
 
-import json
 import sys
 import os
 from datetime import datetime, timezone
@@ -22,6 +19,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils import load_execution_log, get_execution_metadata
+from excel_writer import build_excel_report
 
 # ── 匯入各報表項目模組 ──────────────────────────────────
 import node_07_customer_query
@@ -175,17 +173,11 @@ def run_pipeline(log_filepath: str) -> dict:
     return report
 
 
-def save_report(report: dict, output_path: str):
-    """儲存報表為 JSON 檔案。"""
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
-    print(f"\n[Pipeline] 報表已儲存至: {output_path}")
-
-
 def main():
     # 預設參數
     log_file = "../n8n範例log.json"
-    output_file = "CustomerServiceLog_20260408.json"
+    today_str = datetime.now().strftime("%Y%m%d")
+    output_file = f"CustomerServiceLog_{today_str}.xlsx"
 
     # 解析命令列參數
     args = sys.argv[1:]
@@ -201,11 +193,11 @@ def main():
             i += 1
 
     if not log_file:
-        print("使用方式: python pipeline.py <execution_log.json> [--output report.json]")
+        print("使用方式: python pipeline.py <execution_log.json> [--output report.xlsx]")
         print()
         print("範例:")
         print("  python pipeline.py n8n範例log.json")
-        print("  python pipeline.py n8n範例log.json --output 2026-04-02_report.json")
+        print("  python pipeline.py n8n範例log.json --output 2026-04-02_report.xlsx")
         sys.exit(1)
 
     if not os.path.exists(log_file):
@@ -220,7 +212,8 @@ def main():
     print()
 
     report = run_pipeline(log_file)
-    save_report(report, output_file)
+    build_excel_report(report, output_file)
+    print(f"\n[Pipeline] Excel 報表已儲存至: {output_file}")
 
     # 印出摘要
     print()

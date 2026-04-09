@@ -80,6 +80,8 @@ def aggregate(records: list[dict]) -> dict:
     all_intents = {}
     total_intent_time_ms = 0
     intent_time_count = 0
+    total_stay_sec = 0.0
+    stay_count = 0
 
     for r in valid:
         for intent in r.get("intents", []):
@@ -87,10 +89,16 @@ def aggregate(records: list[dict]) -> dict:
         if r.get("intent_identification_time_ms") is not None:
             total_intent_time_ms += r["intent_identification_time_ms"]
             intent_time_count += 1
+        if r.get("stay_duration_sec") is not None:
+            total_stay_sec += r["stay_duration_sec"]
+            stay_count += 1
 
     return {
         "report_item": "8.理解問題",
         "total_count": len(valid),
+        "avg_stay_duration_sec": (
+            round(total_stay_sec / stay_count, 3) if stay_count else None
+        ),
         "clear_question_count": clear_count,
         "ambiguous_question_count": ambiguous_count,
         "avg_intent_identification_time_ms": (

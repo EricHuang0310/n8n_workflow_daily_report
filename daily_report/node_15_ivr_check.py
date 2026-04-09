@@ -19,6 +19,7 @@ from utils import (
     get_node_output,
     get_node_execution_time,
     node_was_executed,
+    calc_node_duration_seconds,
 )
 
 
@@ -59,6 +60,12 @@ def extract(execution: dict) -> dict | None:
     extract_output = get_node_output(run_data, "extract_intent")
     session_id = extract_output.get("sessionID") if extract_output else None
 
+    # 停留時間: 從 automation_router 到 IVR_response / SMS_response
+    end_node = "IVR_response" if is_ivr else "SMS_response"
+    stay_duration_sec = calc_node_duration_seconds(
+        run_data, "automation_router", end_node
+    )
+
     return {
         "node": "15.是否為語音一站式",
         "entered": True,
@@ -67,6 +74,7 @@ def extract(execution: dict) -> dict | None:
         "is_sms": is_sms,
         "ivr_detail": ivr_detail,
         "sms_detail": sms_detail,
+        "stay_duration_sec": stay_duration_sec,
     }
 
 
@@ -79,15 +87,23 @@ def aggregate(records: list[dict]) -> dict:
 
     # IVR 各功能分布 (by voiceCommand code)
     ivr_function_dist = {}
+    total_stay_sec = 0.0
+    stay_count = 0
     for r in valid:
         detail = r.get("ivr_detail")
         if detail and detail.get("voice_command"):
             cmd = detail["voice_command"]
             ivr_function_dist[cmd] = ivr_function_dist.get(cmd, 0) + 1
+        if r.get("stay_duration_sec") is not None:
+            total_stay_sec += r["stay_duration_sec"]
+            stay_count += 1
 
     return {
         "report_item": "15.是否為語音一站式",
         "total_count": len(valid),
+        "avg_stay_duration_sec": (
+            round(total_stay_sec / stay_count, 3) if stay_count else None
+        ),
         "ivr_transfer_count": ivr_count,
         "non_ivr_count": sms_count,
         "ivr_function_distribution": ivr_function_dist,
