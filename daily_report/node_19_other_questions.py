@@ -6,24 +6,22 @@ node_19_other_questions.py - 19.是否有其他問題
   2. 客戶停留時間
   3. 客戶沒有其他問題的筆數
   4. 客戶有其他信用卡問題的筆數
-  5. 客戶有銀行問題的筆數
+  5. 客戶有銀行 / 其他類型問題的筆數
+  6. 客戶選擇轉接專員的筆數 (新增)
 
-對應 n8n 節點:
-  目前 workflow 在 return_SMS / return_IVR / return_live_support 後，
-  流程即結束 (save_IVR / save_live_support 是存歷史對話)，
-  沒有「是否有其他問題」的後續 wait 節點。
+對應 n8n 節點 (v0.0.1):
+  路徑 A: 客戶接收 SMS 後  → Message → other_send_question → return_other_question
+  路徑 B: 客戶不接收 SMS    → other_question → return_other_question
+  共同接續: save_message1 → receive_other_question → save_other_question
+            → other_question_classifier (5 類)
 
-  ⚠ 目前 workflow 狀態:
-     此節點 **尚未在 workflow 中實作**。
-     本模組預先建立好 extract/aggregate 框架，
-     當 workflow 新增以下節點時，只需填入正確節點名稱即可啟用:
-     
-     預期 workflow 新增節點:
-       - ask_other_question:        播放「請問還有什麼地方可以為您服務的?」
-       - receive_other_question:     Wait 節點等待客戶回覆
-       - other_question_router:      Switch 判斷 (沒有/信用卡問題/銀行問題)
-       
-     修改下方常數即可。
+  other_question_classifier 五個分支:
+    0 crediction → other_query → query → save_query → intent_identification
+                  (客戶說出新的信用卡相關問題, 回到主流程辨識)
+    1 transfer   → response_to_human1 (轉接專員)
+    2 yes        → wait_intent (客戶說有問題但沒講內容, 請其再說一次)
+    3 no         → end_call    (沒有其他問題, 結束服務)
+    4 other      → retuen_mean → return_end (語意不明)
 """
 
 from utils import (
@@ -34,93 +32,110 @@ from utils import (
     calc_node_duration_seconds,
 )
 
-# ── 節點名稱常數 (workflow 擴充後更新) ──────────
-# 當 workflow 新增「是否有其他問題」功能時，填入對應節點名稱
-NODE_ASK_OTHER = None            # 播放「還有什麼問題」的節點
-NODE_RECEIVE_OTHER = None        # 等待客戶回覆的 wait 節點
-NODE_OTHER_ROUTER = None         # 判斷客戶回覆的 switch 節點
 
-# 如果 router 的輸出分支有特定節點名稱，也可以填入
-NODE_NO_OTHER_QUESTION = None    # 客戶沒有其他問題 → 滿意度調查
-NODE_HAS_CARD_QUESTION = None    # 客戶有信用卡問題 → 返回提問
-NODE_HAS_BANK_QUESTION = None    # 客戶有銀行問題 → 返回主選單
+def _classifier_label(run_data: dict) -> str | None:
+    """
+    透過 other_question_classifier 後續節點是否觸發，推斷分類結果。
+    回傳: 'crediction' / 'transfer' / 'yes' / 'no' / 'other' / None
+    """
+    if not node_was_executed(run_data, "other_question_classifier"):
+        return None
+    if node_was_executed(run_data, "other_query"):
+        return "crediction"
+    if node_was_executed(run_data, "response_to_human1"):
+        return "transfer"
+    if node_was_executed(run_data, "wait_intent"):
+        return "yes"
+    if node_was_executed(run_data, "end_call"):
+        return "no"
+    if node_was_executed(run_data, "retuen_mean"):
+        return "other"
+    return "unknown"
 
 
 def extract(execution: dict) -> dict | None:
     """
     從單一 execution 提取「19.是否有其他問題」數據。
-    
-    目前因 workflow 未實作此節點，會嘗試偵測:
-    1. 若 NODE_ASK_OTHER 已設定 → 標準提取
-    2. 若未設定 → 返回 None (不計入報表)
+    走到 return_other_question (無論是 other_question 或 other_send_question) 即計入。
     """
     run_data = get_run_data(execution)
 
-    # ── 方案 1: workflow 已實作，直接提取 ──
-    if NODE_ASK_OTHER and node_was_executed(run_data, NODE_ASK_OTHER):
-        # 取得 session 資訊
-        webhook_output = get_node_output(run_data, "receive_message_API")
-        body = webhook_output.get("body", {}) if webhook_output else {}
+    triggered_after_sms = node_was_executed(run_data, "other_send_question")
+    triggered_after_reject = node_was_executed(run_data, "other_question")
+    entered = (
+        triggered_after_sms
+        or triggered_after_reject
+        or node_was_executed(run_data, "return_other_question")
+        or node_was_executed(run_data, "receive_other_question")
+    )
+    if not entered:
+        return None
 
-        record = {
-            "node": "19.是否有其他問題",
-            "entered": True,
-            "session_id": body.get("sessionID"),
-            "customer_id": body.get("customerID"),
-        }
+    # session / customer
+    webhook = get_node_output(run_data, "receive_message_API")
+    body = webhook.get("body", {}) if webhook else {}
 
-        # 客戶停留時間
-        if NODE_RECEIVE_OTHER and node_was_executed(run_data, NODE_RECEIVE_OTHER):
-            record["stay_duration_sec"] = calc_node_duration_seconds(
-                run_data, NODE_ASK_OTHER, NODE_RECEIVE_OTHER
-            )
+    # 客戶停留時間: return_other_question → receive_other_question
+    stay_duration_sec = calc_node_duration_seconds(
+        run_data, "return_other_question", "receive_other_question"
+    )
 
-        # 客戶回覆分類
-        if NODE_NO_OTHER_QUESTION and node_was_executed(run_data, NODE_NO_OTHER_QUESTION):
-            record["response_type"] = "no_other_question"
-        elif NODE_HAS_CARD_QUESTION and node_was_executed(run_data, NODE_HAS_CARD_QUESTION):
-            record["response_type"] = "has_card_question"
-        elif NODE_HAS_BANK_QUESTION and node_was_executed(run_data, NODE_HAS_BANK_QUESTION):
-            record["response_type"] = "has_bank_question"
-        else:
-            # 嘗試從 router 輸出判斷
-            if NODE_OTHER_ROUTER and node_was_executed(run_data, NODE_OTHER_ROUTER):
-                router_output = get_node_output(run_data, NODE_OTHER_ROUTER)
-                record["response_type"] = "unknown"
-                record["router_output"] = router_output
-            else:
-                record["response_type"] = "unknown"
+    # 客戶回覆內容
+    customer_reply = None
+    recv = get_node_output(run_data, "receive_other_question")
+    if recv:
+        customer_reply = recv.get("body", {}).get("text")
 
-        return record
+    response_label = _classifier_label(run_data)
 
-    # ── 方案 2: workflow 尚未實作，返回 None ──
-    return None
+    return {
+        "node": "19.是否有其他問題",
+        "entered": True,
+        "session_id": body.get("sessionID"),
+        "customer_id": body.get("customerID"),
+        "triggered_from_sms": triggered_after_sms,
+        "triggered_from_reject": triggered_after_reject,
+        "response_type": response_label,
+        "customer_reply": customer_reply,
+        "stay_duration_sec": stay_duration_sec,
+        "execution_time_ms": get_node_execution_time(run_data, "other_question_classifier"),
+    }
 
 
 def aggregate(records: list[dict]) -> dict:
     """彙總多筆 execution 的「19.是否有其他問題」數據。"""
     valid = [r for r in records if r is not None]
 
-    no_other = sum(1 for r in valid if r.get("response_type") == "no_other_question")
-    has_card = sum(1 for r in valid if r.get("response_type") == "has_card_question")
-    has_bank = sum(1 for r in valid if r.get("response_type") == "has_bank_question")
+    no_other = sum(1 for r in valid if r.get("response_type") == "no")
+    has_card = sum(1 for r in valid if r.get("response_type") == "crediction")
+    has_yes = sum(1 for r in valid if r.get("response_type") == "yes")
+    transfer = sum(1 for r in valid if r.get("response_type") == "transfer")
+    other = sum(1 for r in valid if r.get("response_type") == "other")
 
-    result = {
+    stay_records = [r for r in valid if r.get("stay_duration_sec") is not None]
+    avg_stay = None
+    if stay_records:
+        avg_stay = round(
+            sum(r["stay_duration_sec"] for r in stay_records) / len(stay_records),
+            3,
+        )
+
+    response_dist = {
+        "no (沒有其他問題)": no_other,
+        "crediction (信用卡問題)": has_card,
+        "yes (有問題但未具體說明)": has_yes,
+        "transfer (要求轉接專員)": transfer,
+        "other (語意不明)": other,
+    }
+
+    return {
         "report_item": "19.是否有其他問題",
         "total_count": len(valid),
         "no_other_question_count": no_other,
         "has_card_question_count": has_card,
-        "has_bank_question_count": has_bank,
+        "has_unspecified_yes_count": has_yes,
+        "transfer_human_count": transfer,
+        "ambiguous_other_count": other,
+        "avg_stay_duration_sec": avg_stay,
+        "response_distribution": response_dist,
     }
-
-    # 停留時間統計
-    stay_records = [r for r in valid if r.get("stay_duration_sec") is not None]
-    if stay_records:
-        total_stay = sum(r["stay_duration_sec"] for r in stay_records)
-        result["avg_stay_duration_sec"] = round(total_stay / len(stay_records), 3)
-
-    # 如果都是 0 筆，加上提示
-    if not valid:
-        result["note"] = "workflow 尚未實作此節點，目前無資料"
-
-    return result

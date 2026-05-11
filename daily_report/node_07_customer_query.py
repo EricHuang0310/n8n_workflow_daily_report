@@ -7,7 +7,14 @@ node_07_customer_query.py - 7.說出問題
   3. 客戶口述的問題
   4. 客戶ID (用於24小時再進線追蹤)
 
-對應 n8n 節點: receive_message_API
+對應 n8n 節點 (v0.0.1):
+  receive_message_API → first_query → query → save_query → intent_identification
+
+說明:
+  - 首問來自 webhook body.text → 透過 `first_query` 寫入 `query`。
+  - 後續若客戶再次提問 (other_query 或 wait_intent 後重新提問)，
+    `query` 節點都會被重新更新成最新內容。
+  - 我們從 `query` (最後一次執行) 取「客戶口述的問題」。
 """
 
 from utils import (
@@ -35,7 +42,23 @@ def extract(execution: dict) -> dict | None:
 
     body = webhook_output.get("body", {})
 
-    # 停留時間: 從 receive_message_API 到 intent_identification (客戶在此節點的逗留)
+    # 客戶口述問題：優先取 query 節點 (最終確定的問題文字)
+    customer_text = None
+    query_output = get_node_output(run_data, "query")
+    if query_output:
+        customer_text = query_output.get("query")
+    if not customer_text:
+        # fallback: 第一次提問
+        first_query_output = get_node_output(run_data, "first_query")
+        if first_query_output:
+            customer_text = first_query_output.get("query")
+    if not customer_text:
+        customer_text = body.get("text")
+
+    # 是否曾走「其他信用卡問題」分支再次提問
+    has_other_query = node_was_executed(run_data, "other_query")
+
+    # 停留時間: receive_message_API → intent_identification
     stay_duration_sec = calc_node_duration_seconds(
         run_data, "receive_message_API", "intent_identification"
     )
@@ -43,9 +66,11 @@ def extract(execution: dict) -> dict | None:
     return {
         "node": "7.說出問題",
         "entered": True,
-        "customer_text": body.get("text"),
+        "customer_text": customer_text,
         "customer_id": body.get("customerID"),
         "session_id": body.get("sessionID"),
+        "phone": body.get("phone"),
+        "has_followup_question": has_other_query,
         "stay_duration_sec": stay_duration_sec,
         "execution_time_ms": get_node_execution_time(run_data, "receive_message_API"),
     }
@@ -61,6 +86,7 @@ def aggregate(records: list[dict]) -> dict:
     customer_ids = set()
     total_stay_sec = 0.0
     stay_count = 0
+    followup_count = 0
 
     for r in valid:
         if r.get("customer_text"):
@@ -74,12 +100,15 @@ def aggregate(records: list[dict]) -> dict:
         if r.get("stay_duration_sec") is not None:
             total_stay_sec += r["stay_duration_sec"]
             stay_count += 1
+        if r.get("has_followup_question"):
+            followup_count += 1
 
     return {
         "report_item": "7.說出問題",
         "total_count": len(valid),
         "avg_stay_duration_sec": round(total_stay_sec / stay_count, 3) if stay_count else None,
         "unique_customer_count": len(customer_ids),
+        "followup_question_count": followup_count,
         "customer_queries": customer_queries,
         "customer_ids": sorted(customer_ids),
     }
