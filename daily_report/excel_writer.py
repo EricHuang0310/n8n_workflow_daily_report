@@ -33,33 +33,48 @@ FIELD_LABELS = {
     "avg_stay_duration_sec": "平均客戶停留時間(秒)",
     "avg_intent_identification_time_ms": "平均意圖辨識時間(毫秒)",
     "unique_customer_count": "獨立客戶數",
+    # node_07
+    "followup_question_count": "客戶後續再次提問的筆數",
     # node_08
     "clear_question_count": "明確問題的筆數",
     "ambiguous_question_count": "模糊問題的筆數",
+    "second_attempt_count": "重新辨識(再問一次)的筆數",
     # node_09
     "positive_count": "客戶正向回覆的筆數",
     "negative_count": "客戶負向回覆的筆數",
     "other_replay_count": "重聽的筆數",
+    "direct_transfer_human_count": "確認時直接要求轉專員的筆數",
     # node_10
     "automatable_count": "可自動化處理的筆數",
     "non_automatable_count": "不可自動化處理的筆數",
     # node_15
     "ivr_transfer_count": "轉接既有語音各項功能的筆數",
     "non_ivr_count": "非轉接既有語音功能的筆數",
+    # node_18 (SMS)
+    "accept_sms_count": "客戶選擇接收訊息的筆數",
+    "reject_sms_count": "客戶選擇不接收訊息的筆數",
+    "replay_sms_count": "客戶要求重聽 SMS 說明的筆數",
+    "bank_phone_count": "客戶選擇本行行動電話接收的筆數",
+    "custom_phone_count": "客戶自行輸入/口述行動電話的筆數",
+    "sms_success_count": "簡訊發送成功筆數",
+    "sms_fail_count": "簡訊發送失敗筆數",
+    # node_19
+    "no_other_question_count": "客戶沒有其他問題的筆數",
+    "has_card_question_count": "客戶有其他信用卡問題的筆數",
+    "has_unspecified_yes_count": "客戶說有問題但未具體說明的筆數",
+    "transfer_human_count": "客戶要求轉接專員的筆數",
+    "ambiguous_other_count": "客戶語意不明的筆數",
+    "note": "備註",
     # exception_01
     "first_time_redirect_count": "第一次說明轉專員的筆數",
     "second_time_transfer_count": "第二次說明轉專員並轉接的筆數",
+    "final_transferred_count": "最終轉接專員的筆數",
     "transfer_intent_detected_count": "偵測到轉專員意圖的筆數",
     # exception_02
     "negative_first_time_retry_count": "第一次理解錯誤(負向回覆)的筆數",
     "negative_second_time_transfer_count": "連續兩次理解錯誤(負向)並轉接的筆數",
     "other_first_time_replay_count": "第一次理解錯誤(重聽)的筆數",
     "other_second_time_transfer_count": "連續兩次理解錯誤(重聽)並轉接的筆數",
-    # node_19
-    "no_other_question_count": "客戶沒有其他問題的筆數",
-    "has_card_question_count": "客戶有其他信用卡問題的筆數",
-    "has_bank_question_count": "客戶有銀行問題的筆數",
-    "note": "備註",
     # exception_04
     "transferred_to_human_count": "發生錯誤並轉接專員的筆數",
 }
@@ -73,6 +88,8 @@ DISTRIBUTION_LABELS = {
     "timeout_node_distribution": "Time Out 發生的節點",
     "error_node_distribution": "ERROR 發生的節點",
     "error_type_distribution": "ERROR 代碼 / 類型",
+    "path_distribution": "進入此例外的路徑分布",
+    "response_distribution": "客戶回覆分類分布",
 }
 
 # list 類欄位 (明細太長，總覽只顯示筆數 + 提示)
@@ -83,10 +100,8 @@ LIST_LABELS = {
 }
 
 # workflow 尚未完整實作的模組 → Sheet 頂端警示
-INCOMPLETE_MODULES = {
-    "node_18": "⚠ workflow 尚未完整實作 SMS 確認 / 電話選擇 / 發送結果節點，部分指標為 N/A。",
-    "node_19": "⚠ workflow 尚未實作「是否有其他問題」節點，目前無明細資料。",
-}
+# v0.0.1 已實作完整 SMS / 其他問題流程，無 incomplete 模組
+INCOMPLETE_MODULES: dict[str, str] = {}
 
 # 明細 Sheet 固定優先欄位順序
 PRIORITY_COLUMNS = [

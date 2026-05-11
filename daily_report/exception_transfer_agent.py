@@ -2,18 +2,32 @@
 exception_transfer_agent.py - 例外1: 客戶直接說明轉專員
 =========================================================
 報表項目 (例外情境 項次 1):
-  1. 第一次說明轉專員的筆數
-  2. 第二次說明轉專員並轉接的筆數
+  1. 第一次說明轉專員的筆數    (count == 1)
+  2. 第二次說明轉專員並轉接的筆數 (count >= 2)
   3. 客戶ID
 
-對應 n8n 節點判斷邏輯:
-  - intent_identification 辨識出「轉接專員」相關意圖
-  - 若走了 negative_response → repeat_query_response 路徑 (第一次提醒)
-  - 若走了 negative_response_to_human 路徑 (第二次 → 轉接)
+對應 n8n 節點 (v0.0.1):
+  共有三條偵測「客戶說要轉接專員」的路徑:
 
-  另外也對應 negative_count_router:
-    - repeat_query (messagesCount == 1) → 第一次
-    - to_human (messagesCount >= 2)     → 第二次轉人工
+  路徑 A (首次提問即說轉專員):
+    extract_intent → if_to_human → save_human → get_human → if_count_human
+      - count == 1 (返回 set_confirm_response 確認, 不直接轉接)
+      - count >= 2 (response_to_human → retrun_to_human → to_human_response1)
+
+  路徑 B (Confirm 階段 Text Classifier 判定 "yes"):
+    save_confirm → Text Classifier
+      → save_human1 → get_human1 → if_count_human1
+          - count == 1 (返回 set_confirm 給意圖分析)
+          - count >= 2 (response_to_human)
+
+  路徑 C (Other → 再次提問又說轉專員):
+    receive_confirmation_again → intent_identification2 → extract_intent2
+      → save_other → if_to_human2 → save_human2 → get_human2 → if_count_human2
+          - count == 1 (返回 get_otehr)
+          - count >= 2 (response_to_human1)
+
+  路徑 D (是否有其他問題 階段, 客戶要求轉專員):
+    other_question_classifier → response_to_human1
 """
 
 from utils import (
@@ -22,17 +36,10 @@ from utils import (
     node_was_executed,
 )
 
-# 與「轉接專員」相關的意圖關鍵字
-TRANSFER_KEYWORDS = ["轉接", "專員", "真人", "客服人員", "轉人工"]
 
-
-def _intent_is_transfer(intents: list[str]) -> bool:
-    """判斷意圖列表中是否含有轉接專員相關意圖。"""
-    for intent in intents:
-        for kw in TRANSFER_KEYWORDS:
-            if kw in intent:
-                return True
-    return False
+def _human_count(run_data: dict, get_node: str) -> int | None:
+    out = get_node_output(run_data, get_node)
+    return out.get("messagesCount") if out else None
 
 
 def extract(execution: dict) -> dict | None:
@@ -41,40 +48,78 @@ def extract(execution: dict) -> dict | None:
     """
     run_data = get_run_data(execution)
 
-    # 方法1: 檢查 negative_count_router 是否被執行 (客戶否定確認後的計數路由)
-    went_negative_first = node_was_executed(run_data, "negative_response")
-    went_negative_to_human = node_was_executed(run_data, "negative_response_to_human")
+    # 路徑 A: 首次提問即說轉專員
+    path_a = node_was_executed(run_data, "save_human")
+    a_count = _human_count(run_data, "get_human")
+    a_transferred = node_was_executed(run_data, "response_to_human")
 
-    # 方法2: 檢查 error_to_human 節點 (節點 ERROR 走轉人工)
-    went_error_to_human = node_was_executed(run_data, "error_to_human")
+    # 路徑 B: Confirm 階段 Text Classifier yes
+    path_b = node_was_executed(run_data, "save_human1")
+    b_count = _human_count(run_data, "get_human1")
+    # 路徑 B 的轉接也走 response_to_human (來自 if_count_human1)
+    # 因為 response_to_human 同時是路徑 A 與 B 的終點, 用 count 區分
 
-    # 方法3: 檢查意圖是否為「轉接專員」
-    intent_output = get_node_output(run_data, "intent_identification")
-    intents = []
-    if intent_output:
-        intents = [
-            item.get("intent", "")
-            for item in intent_output.get("output", [])
-        ]
-    is_transfer_intent = _intent_is_transfer(intents)
+    # 路徑 C: Other 後再次提問又說轉專員
+    path_c = node_was_executed(run_data, "save_human2")
+    c_count = _human_count(run_data, "get_human2")
+    c_transferred = node_was_executed(run_data, "response_to_human1") and not node_was_executed(run_data, "other_question_classifier")
 
-    # 若都不符合，非此例外情境
-    if not went_negative_first and not went_negative_to_human and not is_transfer_intent:
+    # 路徑 D: 是否有其他問題階段
+    path_d = (
+        node_was_executed(run_data, "other_question_classifier")
+        and node_was_executed(run_data, "response_to_human1")
+    )
+
+    # 顯式 ERROR 路徑也可能轉專員 (response_to_human2 / error_to_human)
+    error_to_human = node_was_executed(run_data, "error_to_human")
+
+    if not (path_a or path_b or path_c or path_d or error_to_human):
         return None
 
+    # 是否最終轉接 (走到 response_to_human 系列或 error_to_human)
+    final_transferred = (
+        a_transferred
+        or node_was_executed(run_data, "response_to_human1")
+        or node_was_executed(run_data, "response_to_human2")
+        or error_to_human
+    )
+
+    # 第一次說明 vs 第二次轉接 (任一路徑 count==1 視為第一次, count>=2 視為第二次)
+    first_time = False
+    second_time = False
+    for cnt in (a_count, b_count, c_count):
+        if cnt is None:
+            continue
+        if cnt == 1:
+            first_time = True
+        elif cnt >= 2:
+            second_time = True
+
     # 取得客戶 ID
+    webhook = get_node_output(run_data, "receive_message_API")
+    body = webhook.get("body", {}) if webhook else {}
+    customer_id = body.get("customerID")
+    session_id = body.get("sessionID")
+
+    # 偵測到的意圖
+    intents = []
     extract_output = get_node_output(run_data, "extract_intent")
-    customer_id = extract_output.get("customerID") if extract_output else None
-    session_id = extract_output.get("sessionID") if extract_output else None
+    if extract_output:
+        intents = extract_output.get("intent", []) or []
 
     return {
         "exception": "客戶直接說明轉專員",
         "session_id": session_id,
         "customer_id": customer_id,
-        "is_transfer_intent": is_transfer_intent,
         "intents": intents,
-        "first_time_redirect": went_negative_first and not went_negative_to_human,
-        "second_time_transferred": went_negative_to_human,
+        "path_a_first_intent": path_a,
+        "path_b_text_classifier": path_b,
+        "path_c_second_intent": path_c,
+        "path_d_other_question": path_d,
+        "error_to_human": error_to_human,
+        "first_time_redirect": first_time and not second_time,
+        "second_time_transferred": second_time or final_transferred and not first_time,
+        "final_transferred": final_transferred,
     }
 
 
@@ -84,16 +129,25 @@ def aggregate(records: list[dict]) -> dict:
 
     first_time = sum(1 for r in valid if r.get("first_time_redirect"))
     second_time = sum(1 for r in valid if r.get("second_time_transferred"))
-    transfer_intents = sum(1 for r in valid if r.get("is_transfer_intent"))
+    transferred = sum(1 for r in valid if r.get("final_transferred"))
     customer_ids = sorted(set(
         r["customer_id"] for r in valid if r.get("customer_id")
     ))
+
+    path_distribution = {
+        "首次提問即說轉專員":     sum(1 for r in valid if r.get("path_a_first_intent")),
+        "確認階段表達要轉接專員": sum(1 for r in valid if r.get("path_b_text_classifier")),
+        "再次提問仍說轉專員":     sum(1 for r in valid if r.get("path_c_second_intent")),
+        "其他問題階段要求轉專員": sum(1 for r in valid if r.get("path_d_other_question")),
+        "錯誤路徑進入轉專員":     sum(1 for r in valid if r.get("error_to_human")),
+    }
 
     return {
         "report_item": "例外1.客戶直接說明轉專員",
         "total_occurrences": len(valid),
         "first_time_redirect_count": first_time,
         "second_time_transfer_count": second_time,
-        "transfer_intent_detected_count": transfer_intents,
+        "final_transferred_count": transferred,
+        "path_distribution": path_distribution,
         "customer_ids": customer_ids,
     }

@@ -41,21 +41,21 @@ python pipeline.py ../n8n範例log.json
 python pipeline.py ../n8n範例log.json --output 2026-04-02_report.xlsx
 ```
 
-## 報表項目與 n8n 節點對應表
+## 報表項目與 n8n 節點對應表 (對應 v0.0.1 workflow)
 
 | 報表項目 | Python 模組 | 關鍵 n8n 節點 |
 |---------|------------|--------------|
-| 7.說出問題 | `node_07_customer_query` | `receive_message_API` |
-| 8.理解問題 | `node_08_intent_recognition` | `intent_identification`, `extract_intent` |
-| 9.與客戶確認問題 | `node_09_confirm_question` | `ambiguous_intent_analyze`, `ambiguity_router` |
+| 7.說出問題 | `node_07_customer_query` | `receive_message_API`, `first_query`, `query` |
+| 8.理解問題 | `node_08_intent_recognition` | `intent_identification`, `extract_intent`, `intent_identification2` |
+| 9.與客戶確認問題 | `node_09_confirm_question` | `Text Classifier`, `ambiguous_intent_analyze`, `ambiguity_router` |
 | 10.是否可自動化處理 | `node_10_automation_check` | `automation_router`, `*_response` 節點 |
 | 15.是否為語音一站式 | `node_15_ivr_check` | `IVR_response`, `SMS_response` |
-| 18.說答案後發送訊息(SMS) | `node_18_sms_send` | `SMS_response` (⚠ workflow 部分節點尚未實作) |
-| 19.是否有其他問題 | `node_19_other_questions` | ⚠ workflow 尚未實作 |
-| 例外1.轉專員 | `exception_transfer_agent` | `negative_response_to_human` |
+| 18.說答案後發送訊息(SMS) | `node_18_sms_send` | `SMS_response`, `send_message_intent`, `phone_classifier`, `Message` |
+| 19.是否有其他問題 | `node_19_other_questions` | `other_question`, `other_send_question`, `other_question_classifier`, `end_call`, `wait_intent` |
+| 例外1.轉專員 | `exception_transfer_agent` | `save_human` / `save_human1` / `save_human2`, `response_to_human*` |
 | 例外2.理解錯誤 | `exception_misunderstanding` | `save_negative_count`, `save_other_count` |
-| 例外3.Time Out | `exception_timeout` | Wait 節點, HTTP timeout |
-| 例外4.系統ERROR | `exception_error` | `error_to_human`, 任一失敗節點 |
+| 例外3.Time Out | `exception_timeout` | Wait 節點 (`receive_*`) `executionStatus == "waiting"` |
+| 例外4.系統ERROR | `exception_error` | `error_to_human`, `error_msg`, 任一節點 `executionStatus == "error"` |
 
 ## 輸出格式
 
@@ -69,7 +69,7 @@ python pipeline.py ../n8n範例log.json --output 2026-04-02_report.xlsx
 
 - **總覽 Sheet** 集中呈現 PDF `報表需求項目` 要求的所有彙總指標 (進入此節點之數量、客戶停留時間、各種筆數分布等)，方便快速稽核。
 - **每個節點 Sheet** 是純明細表格，欄位為該模組 `extract()` 回傳的所有 key 聯集，`session_id` / `customer_id` 等固定欄位置於前方。
-- **`18_說答案後發送訊息SMS` / `19_是否有其他問題`** 因 workflow 尚未完整實作，Sheet 頂端會標註 `⚠ workflow 尚未完整實作`，等 workflow 擴充後即可自動補齊指標。
+- **`18_說答案後發送訊息SMS` / `19_是否有其他問題`** v0.0.1 workflow 已實作完整流程 (SMS 接收確認、電話確認、實際發送 SMS、後續詢問是否還有其他問題)，模組會自動從對應節點提取指標。
 
 ## 各模組 extract / aggregate 設計模式
 

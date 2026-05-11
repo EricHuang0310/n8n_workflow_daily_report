@@ -6,76 +6,97 @@ exception_timeout.py - 例外3: 任一流程 Time Out
   2. 連續兩次 Time Out 並轉接專員的筆數
   3. Time Out 發生的節點
 
-對應 n8n 節點:
-  - receive_confirmation (Wait 節點) 等待客戶回覆 timeout
-  - receive_confirmation_again (Wait 節點) 第二次等待 timeout
-  - 在 execution log 中，timeout 的表現為 execution.status == 'waiting' 或
-    特定 wait 節點有 waitTill 時間戳
-  
-注意: n8n 的 Wait 節點 timeout 通常不在同一個 execution 內完成，
-      而是 execution 狀態變成 'waiting'。需要根據 execution 的整體狀態來判斷。
+對應 n8n 行為:
+  - Wait 節點 (resume=webhook) 等待客戶回覆。若客戶未在期限內回覆，
+    n8n execution 會被 cancel / timeout，最後一個 wait 節點的
+    executionStatus 仍為 "waiting"。
+  - 在 execution log 中表現為:
+      execution.status in ("canceled", "waiting", "stopped")
+      AND 最後執行的節點是 Wait 類節點且 status == "waiting"
+  - intent_identification HTTP 節點設定了 5000ms timeout，
+    若 LLM 服務超時，會走 onError → error_msg/error_to_human (例外4 處理)。
+
+v0.0.1 中已知 Wait 節點:
+  receive_confirmation, receive_confirmation_again, receive_confirmation_message,
+  receive_other_question, receive_check_phone, receive_speck_phone, receive_confirm_phone
 """
 
 from utils import (
     get_run_data,
     get_node_output,
     get_node_execution_time,
-    node_was_executed,
-    get_all_node_names,
     get_node_status,
+    node_was_executed,
 )
+
+
+# Wait 節點 (resume=webhook) 列表
+WAIT_NODES = [
+    "receive_confirmation",
+    "receive_confirmation_again",
+    "receive_confirmation_message",
+    "receive_other_question",
+    "receive_check_phone",
+    "receive_speck_phone",
+    "receive_confirm_phone",
+]
+
+# 執行狀態被視為 timeout / 客戶未回覆的情境
+TIMEOUT_EXEC_STATUS = {"canceled", "waiting", "stopped", "crashed"}
+
+
+def _find_pending_wait_node(run_data: dict) -> str | None:
+    """找出仍停留在 'waiting' 狀態的 Wait 節點 (代表 timeout)。"""
+    for node in WAIT_NODES:
+        if not node_was_executed(run_data, node):
+            continue
+        status = get_node_status(run_data, node)
+        if status == "waiting":
+            return node
+    return None
 
 
 def extract(execution: dict) -> dict | None:
     """
     從單一 execution 提取「例外3: Time Out」數據。
-    
-    Time Out 判斷:
-    1. execution.status == 'waiting' 且 waitTill 有值 → 等待中
-    2. execution.status == 'success' 但最後執行節點是 wait 類 → 可能 timeout
-    3. 特定節點 executionTime 超過閾值
     """
     run_data = get_run_data(execution)
     exec_status = execution.get("status")
-    wait_till = execution.get("waitTill")
     last_node = (
         execution.get("data", {})
         .get("resultData", {})
         .get("lastNodeExecuted")
     )
 
-    # 判斷是否為 timeout 情境
     is_timeout = False
     timeout_node = None
 
-    # 情境 1: execution 狀態為 waiting (n8n 正在等客戶回覆)
-    if exec_status == "waiting" and wait_till:
+    # 情境 1: Wait 節點仍 waiting → 客戶未回覆 → timeout
+    pending_wait = _find_pending_wait_node(run_data)
+    if pending_wait:
+        is_timeout = True
+        timeout_node = pending_wait
+
+    # 情境 2: execution 狀態為 canceled / waiting / stopped，
+    #         且 lastNodeExecuted 是 Wait 節點
+    elif exec_status in TIMEOUT_EXEC_STATUS and last_node in WAIT_NODES:
         is_timeout = True
         timeout_node = last_node
 
-    # 情境 2: 檢查各節點的 HTTP timeout
-    # intent_identification 設定了 5000ms timeout
+    # 情境 3: intent_identification HTTP timeout (5000ms)
     if node_was_executed(run_data, "intent_identification"):
         exec_time = get_node_execution_time(run_data, "intent_identification")
         status = get_node_status(run_data, "intent_identification")
         if status != "success" and exec_time and exec_time >= 5000:
             is_timeout = True
-            timeout_node = "intent_identification"
-
-    # 情境 3: 檢查 LLM 分析節點是否超時
-    if node_was_executed(run_data, "ambiguous_intent_analyze"):
-        exec_time = get_node_execution_time(run_data, "ambiguous_intent_analyze")
-        status = get_node_status(run_data, "ambiguous_intent_analyze")
-        if status != "success" and exec_time and exec_time >= 10000:
-            is_timeout = True
-            timeout_node = "ambiguous_intent_analyze"
+            timeout_node = timeout_node or "intent_identification"
 
     if not is_timeout:
         return None
 
-    # 取得 session 資訊
-    webhook_output = get_node_output(run_data, "receive_message_API")
-    body = webhook_output.get("body", {}) if webhook_output else {}
+    # 客戶資訊
+    webhook = get_node_output(run_data, "receive_message_API")
+    body = webhook.get("body", {}) if webhook else {}
 
     return {
         "exception": "任一流程TimeOut",
@@ -83,7 +104,6 @@ def extract(execution: dict) -> dict | None:
         "customer_id": body.get("customerID"),
         "timeout_node": timeout_node,
         "execution_status": exec_status,
-        "wait_till": wait_till,
         "last_node_executed": last_node,
     }
 
@@ -92,14 +112,18 @@ def aggregate(records: list[dict]) -> dict:
     """彙總多筆 execution 的「例外3: Time Out」數據。"""
     valid = [r for r in records if r is not None]
 
-    # 各節點 timeout 統計
     timeout_node_dist = {}
     for r in valid:
         node = r.get("timeout_node", "unknown")
         timeout_node_dist[node] = timeout_node_dist.get(node, 0) + 1
 
+    customer_ids = sorted(set(
+        r["customer_id"] for r in valid if r.get("customer_id")
+    ))
+
     return {
         "report_item": "例外3.任一流程TimeOut",
         "total_timeout_count": len(valid),
         "timeout_node_distribution": timeout_node_dist,
+        "customer_ids": customer_ids,
     }

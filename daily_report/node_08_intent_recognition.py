@@ -8,10 +8,14 @@ node_08_intent_recognition.py - 8.理解問題
   4. 明確問題的筆數
   5. 模糊問題的筆數
 
-對應 n8n 節點: intent_identification, extract_intent
+對應 n8n 節點 (v0.0.1):
+  - intent_identification:  首次意圖辨識 (HTTP POST → intentIdentification)
+  - intent_identification2: 客戶第一次 confirm 回覆「重聽/其他」後再辨識
+  - extract_intent / extract_intent2: 將 output 攤平成 intent 陣列
+
 判斷邏輯:
   - output 陣列長度 == 1 → 明確問題
-  - output 陣列長度 >= 2 → 模糊問題 (回傳最多3個候選意圖)
+  - output 陣列長度 >= 2 → 模糊問題
 """
 
 from utils import (
@@ -23,16 +27,14 @@ from utils import (
 )
 
 
-def extract(execution: dict) -> dict | None:
+def _parse_intent_node(run_data: dict, intent_node: str, extract_node: str) -> dict | None:
     """
-    從單一 execution 提取「8.理解問題」節點數據。
+    取出某一輪 intent_identification 的辨識結果。
     """
-    run_data = get_run_data(execution)
-
-    if not node_was_executed(run_data, "intent_identification"):
+    if not node_was_executed(run_data, intent_node):
         return None
 
-    intent_output = get_node_output(run_data, "intent_identification")
+    intent_output = get_node_output(run_data, intent_node)
     if not intent_output:
         return None
 
@@ -40,34 +42,58 @@ def extract(execution: dict) -> dict | None:
     intents = [item.get("intent") for item in output_list if item.get("intent")]
     response_model = output_list[0].get("responseModel") if output_list else None
 
-    # 明確 vs 模糊
-    is_clear = len(output_list) == 1
-    is_ambiguous = len(output_list) >= 2
+    extract_output = get_node_output(run_data, extract_node) if extract_node else None
+    session_id = extract_output.get("sessionID") if extract_output else None
 
-    # 停留時間: intent_identification 本身的執行時間 (包含呼叫 LLM)
-    exec_time_ms = get_node_execution_time(run_data, "intent_identification")
+    return {
+        "intent_node": intent_node,
+        "intents": intents,
+        "intent_count": len(output_list),
+        "is_clear": len(output_list) == 1,
+        "is_ambiguous": len(output_list) >= 2,
+        "response_model": response_model,
+        "intent_identification_time_ms": get_node_execution_time(run_data, intent_node),
+        "session_id": session_id,
+    }
 
-    # 從 intent_identification 到下一步 extract_intent 的時間差
+
+def extract(execution: dict) -> dict | None:
+    """
+    從單一 execution 提取「8.理解問題」節點數據。
+    優先取首次 intent_identification；若同一次 execution 又走 intent_identification2
+    (other → 再辨識)，則回傳的 attempts 會包含兩輪結果。
+    """
+    run_data = get_run_data(execution)
+
+    primary = _parse_intent_node(run_data, "intent_identification", "extract_intent")
+    if not primary:
+        return None
+
+    secondary = _parse_intent_node(run_data, "intent_identification2", "extract_intent2")
+
+    # 客戶停留時間: receive_message_API → 首次 intent_identification 完成
+    # 用 intent_identification → extract_intent 區段代表 LLM 辨識耗時
     stay_duration_sec = calc_node_duration_seconds(
         run_data, "intent_identification", "extract_intent"
     )
 
-    # 取出 extract_intent 節點的完整資訊
-    extract_output = get_node_output(run_data, "extract_intent")
-    session_id = extract_output.get("sessionID") if extract_output else None
-
-    return {
+    record = {
         "node": "8.理解問題",
         "entered": True,
-        "session_id": session_id,
-        "intents": intents,
-        "intent_count": len(output_list),
-        "is_clear": is_clear,
-        "is_ambiguous": is_ambiguous,
-        "response_model": response_model,
-        "intent_identification_time_ms": exec_time_ms,
+        "session_id": primary["session_id"],
+        "intents": primary["intents"],
+        "intent_count": primary["intent_count"],
+        "is_clear": primary["is_clear"],
+        "is_ambiguous": primary["is_ambiguous"],
+        "response_model": primary["response_model"],
+        "intent_identification_time_ms": primary["intent_identification_time_ms"],
         "stay_duration_sec": stay_duration_sec,
+        "had_second_attempt": secondary is not None,
     }
+    if secondary:
+        record["second_attempt_intents"] = secondary["intents"]
+        record["second_attempt_time_ms"] = secondary["intent_identification_time_ms"]
+    return record
 
 
 def aggregate(records: list[dict]) -> dict:
@@ -76,6 +102,7 @@ def aggregate(records: list[dict]) -> dict:
 
     clear_count = sum(1 for r in valid if r.get("is_clear"))
     ambiguous_count = sum(1 for r in valid if r.get("is_ambiguous"))
+    second_attempt_count = sum(1 for r in valid if r.get("had_second_attempt"))
 
     all_intents = {}
     total_intent_time_ms = 0
@@ -101,6 +128,7 @@ def aggregate(records: list[dict]) -> dict:
         ),
         "clear_question_count": clear_count,
         "ambiguous_question_count": ambiguous_count,
+        "second_attempt_count": second_attempt_count,
         "avg_intent_identification_time_ms": (
             round(total_intent_time_ms / intent_time_count, 1)
             if intent_time_count else None
