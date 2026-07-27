@@ -158,7 +158,7 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 416],
+      "position": [480, 528],
       "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a008",
       "name": "build_json_file"
     },
@@ -202,29 +202,21 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [480, 416],
+      "position": [240, 416],
       "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a013",
       "name": "route_output"
     },
     {
       "parameters": {
-        "respondWith": "binary",
-        "options": {
-          "responseHeaders": {
-            "entries": [
-              {
-                "name": "Content-Disposition",
-                "value": "=attachment; filename=\"{{ $json.fileName }}\""
-              }
-            ]
-          }
-        }
+        "respondWith": "json",
+        "responseBody": "={{ { \"data\": $json.data } }}",
+        "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [720, 320],
+      "position": [480, 304],
       "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a014",
-      "name": "respond_download"
+      "name": "respond_json"
     },
     {
       "parameters": {
@@ -235,7 +227,7 @@
       },
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
-      "position": [720, 512],
+      "position": [720, 528],
       "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a009",
       "name": "write_log_file"
     },
@@ -267,8 +259,8 @@
     },
     {
       "parameters": {
-        "content": "## 輸出去向\n\n**排程 / 手動觸發** → `write_log_file`\n寫到 **n8n 伺服器**的 `outputDir`，\n不是你的電腦。\n\n**Webhook 觸發** → `respond_download`\n直接把檔案回傳給呼叫端，\n本機即可下載到 `D:\\...`：\n\n```\nGET http://10.13.60.173:5670\n    /webhook/voicebot-log?date=20260518\n```\n\n⚠️ Webhook 預設沒有驗證，\n正式環境請在 webhook 節點加\nHeader Auth credential。",
-        "height": 420,
+        "content": "## 輸出去向\n\n**Webhook 觸發** → `respond_json`\n直接回傳 JSON 文字內容（不是檔案），\nContent-Type: application/json：\n\n```\nGET http://10.13.60.173:5670\n    /webhook/voicebot-log?date=20260518\n```\n\n回傳格式與原檔案一致：\n`{ \"data\": [ ... ] }`\n\n**排程 / 手動觸發** → `write_log_file`\n經 `build_json_file` 產生檔案，\n寫到 **n8n 伺服器**的 `outputDir`，\n不是你的電腦。\n\n⚠️ Webhook 預設沒有驗證，\n正式環境請在 webhook 節點加\nHeader Auth credential。",
+        "height": 460,
         "width": 340,
         "color": 5
       },
@@ -351,7 +343,7 @@
       "main": [
         [
           {
-            "node": "build_json_file",
+            "node": "route_output",
             "type": "main",
             "index": 0
           }
@@ -362,7 +354,7 @@
       "main": [
         [
           {
-            "node": "route_output",
+            "node": "write_log_file",
             "type": "main",
             "index": 0
           }
@@ -384,14 +376,14 @@
       "main": [
         [
           {
-            "node": "respond_download",
+            "node": "respond_json",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "write_log_file",
+            "node": "build_json_file",
             "type": "main",
             "index": 0
           }
