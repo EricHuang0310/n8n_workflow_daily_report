@@ -3,19 +3,6 @@
   "nodes": [
     {
       "parameters": {
-        "path": "get-execution-log",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [-64, 1104],
-      "id": "cf962e2b-7028-4246-8fb6-0b0d17a9e61f",
-      "name": "Webhook",
-      "webhookId": "adf227c9-8a25-4f00-ab5a-a569665c6176"
-    },
-    {
-      "parameters": {
         "assignments": {
           "assignments": [
             {
@@ -43,12 +30,6 @@
               "type": "string"
             },
             {
-              "id": "c1a00001-0000-4000-8000-000000000009",
-              "name": "targetYmd",
-              "value": "={{ $today.minus(1,'days').format('yyyy-MM-dd') }}",
-              "type": "string"
-            },
-            {
               "id": "c1a00001-0000-4000-8000-000000000005",
               "name": "outputDir",
               "value": "D:\\03_客服語音機器人\\n8n_webhook_log_output",
@@ -72,7 +53,10 @@
       },
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [176, 1104],
+      "position": [
+        176,
+        1104
+      ],
       "id": "dc33754d-a644-4efd-909f-bef8f898a3b2",
       "name": "config"
     },
@@ -107,92 +91,99 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
-      "position": [416, 1104],
+      "position": [
+        416,
+        1104
+      ],
       "id": "b63e4433-6123-4156-a613-75ed040c01c8",
       "name": "get_workflow"
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "# 對應 Python 原腳本: build_execution_api_url() 中取 projectId 的部分。\n# 從 workflow 回應的 shared[0].projectId 取出 projectId，缺少就明確報錯。\npayload = _input.first().json\n\n# n8n 傳進來的是 JS 物件代理，轉成 Python dict 後才好操作。\nif hasattr(payload, 'to_py'):\n    payload = payload.to_py()\n\nshared = payload.get('shared')\nif not isinstance(shared, list) or len(shared) == 0:\n    raise Exception('workflow 回應缺少 shared 資料')\n\nproject_id = shared[0].get('projectId') or ''\nif not project_id:\n    raise Exception('workflow 回應缺少 projectId')\n\nreturn [{'json': {'projectId': project_id}}]"
+        "jsCode": "// 對應 Python: build_execution_api_url() 中取 projectId 的部分。\n// 從 workflow 回應的 shared[0].projectId 取出 projectId，缺少就明確報錯。\nconst payload = $input.first().json;\n\nconst shared = payload.shared;\nif (!Array.isArray(shared) || shared.length === 0) {\n  throw new Error('workflow 回應缺少 shared 資料');\n}\n\nconst projectId = shared[0]?.projectId ?? '';\nif (!projectId) {\n  throw new Error('workflow 回應缺少 projectId');\n}\n\nreturn [{ json: { projectId } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [656, 1104],
+      "position": [
+        656,
+        1104
+      ],
       "id": "c099cf11-25b5-46df-ae48-7dd365635d31",
       "name": "extract_project_id"
     },
     {
       "parameters": {
-        "url": "={{ $('config').first().json.n8nBaseUrl }}/api/v1/executions",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "includeData",
-              "value": "true"
-            },
-            {
-              "name": "workflowId",
-              "value": "={{ $('config').first().json.workflowId }}"
-            },
-            {
-              "name": "projectId",
-              "value": "={{ $json.projectId }}"
-            }
-          ]
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-N8N-API-KEY",
-              "value": "={{ $('config').first().json.apiKey }}"
-            },
-            {
-              "name": "accept",
-              "value": "application/json"
-            }
-          ]
-        },
-        "options": {
-          "timeout": "={{ $('config').first().json.timeoutMs }}",
-          "pagination": {
-            "pagination": {
-              "paginationMode": "updateAParameterInEachRequest",
-              "parameters": {
-                "parameters": [
-                  {
-                    "type": "qs",
-                    "name": "cursor",
-                    "value": "={{ $response.body.nextCursor }}"
-                  }
-                ]
-              },
-              "paginationCompleteWhen": "other",
-              "completeExpression": "={{ !$response.body.nextCursor || (($response.body.data || []).length > 0 && String($response.body.data[$response.body.data.length - 1].startedAt || '').slice(0, 10) < $('config').first().json.targetYmd) }}",
-              "limitPagesFetched": true,
-              "maxRequests": "={{ $('config').first().json.maxPages }}"
-            }
-          }
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.3,
-      "position": [896, 1104],
-      "id": "640c7024-5219-42b1-9636-b57d64161904",
-      "name": "fetch_executions"
-    },
-    {
-      "parameters": {
-        "language": "python",
-        "pythonCode": "# 對應 Python 原腳本: fetch_execution_log() 的日期篩選 + scrub_pii()\n#\n# 上游 fetch_executions 已用 HTTP Request 內建分頁抓完所有頁，\n# 每一頁是一個 item，這裡先合併再篩日期，最後遞迴去個資。\n#\n# 註：n8n 的 Python Code node 跑在 Pyodide 上，沒有網路能力，\n#     所以「發請求／分頁」留在 HTTP Request 節點做，Python 只處理資料。\n\nPII_KEYS = {'customerID', 'phone'}\n\n# 用 dict 當計數器（而非 global 變數），這樣不論 n8n 是把這段程式\n# 放在模組層級還是包進函式裡執行，計數都能正常運作。\ncounter = {'removed': 0}\n\n\ndef scrub_pii(obj, counter):\n    \"\"\"遞迴移除任意層級中的個資欄位（就地修改）。\n\n    customerID / phone 散落在 receive_message_API、extract_intent、\n    receive_confirmation 等 20 多個節點，因此以「key 名稱」為準遞迴清除，\n    而不是只清單一條路徑，才能確保完整去個資。\n    只比對完全相同的 key，不會誤刪 phone_number 等欄位。\n    \"\"\"\n    if isinstance(obj, list):\n        for item in obj:\n            scrub_pii(item, counter)\n        return obj\n    if isinstance(obj, dict):\n        for key in list(obj.keys()):\n            if key in PII_KEYS:\n                del obj[key]\n                counter['removed'] += 1\n            else:\n                scrub_pii(obj[key], counter)\n    return obj\n\n\ndef to_dict(value):\n    \"\"\"把 n8n 傳來的 JS 物件代理轉成純 Python 結構。\"\"\"\n    if hasattr(value, 'to_py'):\n        return value.to_py()\n    return value\n\n\ncfg = to_dict(_('config').first().json)\n\ntarget_date = str(cfg.get('targetDate') or '')\ntarget_ymd = None\nif target_date:\n    target_ymd = target_date[0:4] + '-' + target_date[4:6] + '-' + target_date[6:8]\n\n# 合併所有分頁，並在合併時就篩掉非目標日期的資料。\nall_executions = []\npages_fetched = 0\n\nfor item in _input.all():\n    page = to_dict(item.json)\n    pages_fetched += 1\n\n    for ex in (page.get('data') or []):\n        date_ymd = str(ex.get('startedAt') or '')[0:10]\n        if target_ymd is None or date_ymd == target_ymd:\n            all_executions.append(ex)\n\nscrub_pii(all_executions, counter)\n\nreturn [\n    {\n        'json': {\n            'data': all_executions,\n            'stats': {\n                'targetDate': target_date,\n                'pagesFetched': pages_fetched,\n                'total': len(all_executions),\n                'piiKeysRemoved': counter['removed'],\n                'piiKeys': sorted(PII_KEYS),\n            },\n        }\n    }\n]"
+        "jsCode": "// 對應 Python: fetch_execution_log() + fetch_one_page()\n// 以 cursor 自動分頁抓取 execution，抓取過程中同時做日期篩選，\n// 一旦看到早於目標日期的資料就提前停止分頁（API 以新到舊排序）。\nconst cfg = $('config').first().json;\nconst projectId = $input.first().json.projectId;\n\nconst baseUrl = String(cfg.n8nBaseUrl).replace(/\\/+$/, '');\nconst apiKey = cfg.apiKey;\nconst workflowId = cfg.workflowId;\nconst timeout = Number(cfg.timeoutMs) || 60000;\nconst maxPages = Number(cfg.maxPages) || 200;\n\nconst targetDate = String(cfg.targetDate || '');\nconst targetYmd = targetDate\n  ? `${targetDate.slice(0, 4)}-${targetDate.slice(4, 6)}-${targetDate.slice(6, 8)}`\n  : null;\n\nconst baseExecUrl =\n  `${baseUrl}/api/v1/executions?includeData=true` +\n  `&workflowId=${encodeURIComponent(workflowId)}` +\n  `&projectId=${encodeURIComponent(projectId)}`;\n\nconst allExecutions = [];\nlet url = baseExecUrl;\nlet page = 1;\nlet stoppedEarly = false;\n\nwhile (page <= maxPages) {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url,\n    headers: { 'X-N8N-API-KEY': apiKey, accept: 'application/json' },\n    json: true,\n    timeout,\n  });\n\n  const executions = Array.isArray(resp?.data) ? resp.data : [];\n\n  let stopPaging = false;\n  for (const ex of executions) {\n    const dateYmd = String(ex?.startedAt ?? '').slice(0, 10);\n\n    if (targetYmd) {\n      if (dateYmd === targetYmd) {\n        allExecutions.push(ex);\n      } else if (dateYmd && dateYmd < targetYmd) {\n        stopPaging = true;\n      }\n    } else {\n      allExecutions.push(ex);\n    }\n  }\n\n  if (stopPaging) {\n    stoppedEarly = true;\n    break;\n  }\n\n  const nextCursor = resp?.nextCursor;\n  if (!nextCursor) {\n    break;\n  }\n\n  url = `${baseExecUrl}&cursor=${encodeURIComponent(nextCursor)}`;\n  page += 1;\n}\n\nreturn [\n  {\n    json: {\n      data: allExecutions,\n      stats: {\n        targetDate,\n        pagesFetched: page,\n        stoppedEarly,\n        total: allExecutions.length,\n      },\n    },\n  },\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1136, 1104],
+      "position": [
+        896,
+        1104
+      ],
+      "id": "640c7024-5219-42b1-9636-b57d64161904",
+      "name": "fetch_executions_paged"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 對應 Python: scrub_pii()\n// customerID / phone 散落在 receive_message_API、extract_intent、\n// receive_confirmation 等 20 多個節點，因此以「key 名稱」為準遞迴清除，\n// 而不是只清單一條路徑，才能確保完整去個資。\nconst PII_KEYS = new Set(['customerID', 'phone']);\n\nlet removed = 0;\n\nfunction scrubPii(obj) {\n  if (Array.isArray(obj)) {\n    for (const item of obj) scrubPii(item);\n    return obj;\n  }\n  if (obj !== null && typeof obj === 'object') {\n    for (const key of Object.keys(obj)) {\n      if (PII_KEYS.has(key)) {\n        delete obj[key];\n        removed += 1;\n      } else {\n        scrubPii(obj[key]);\n      }\n    }\n  }\n  return obj;\n}\n\nconst input = $input.first().json;\n// 先深拷貝再清除，避免就地改動上游節點的資料。\nconst data = scrubPii(JSON.parse(JSON.stringify(input.data ?? [])));\n\nreturn [\n  {\n    json: {\n      data,\n      stats: {\n        ...(input.stats ?? {}),\n        piiKeysRemoved: removed,\n        piiKeys: [...PII_KEYS],\n      },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        1104
+      ],
       "id": "4ecc85c0-7210-4867-909d-61cc6a95bf71",
-      "name": "filter_and_scrub"
+      "name": "scrub_pii"
+    },
+    {
+      "parameters": {
+        "content": "## 設定區\n\n在 `config` 節點調整：\n\n- **targetDate**：預設抓「昨天」(yyyyMMdd)。\n  要補跑改成固定值，例如 `20260518`。\n- **maxPages**：分頁上限，避免無限迴圈。\n- **timeoutMs**：單次 API 請求逾時 (毫秒)。\n- **outputDir**：目前流程直接回傳 JSON、\n  沒有寫檔節點，此欄位保留但未使用。",
+        "height": 340,
+        "width": 320,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        720
+      ],
+      "id": "47900296-b282-407a-9e45-7298554fcb58",
+      "name": "note_config"
+    },
+    {
+      "parameters": {
+        "content": "## 去個資 (JavaScript)\n\n遞迴掃描整份 execution，移除任何層級的\n`customerID` 與 `phone`。\n\n個資散落在 receive_message_API、\nextract_intent、receive_confirmation…\n等 20 多個節點，只清單一條路徑\n會有大量殘留，因此以 key 名稱清除。\n\n只比對**完全相同**的 key，\n不會誤刪 `phone_number` 等欄位。",
+        "height": 320,
+        "width": 300,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        720
+      ],
+      "id": "617b88d1-ad10-4f41-a162-175ac300900b",
+      "name": "note_pii"
+    },
+    {
+      "parameters": {
+        "path": "get-execution-log",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -64,
+        1104
+      ],
+      "id": "cf962e2b-7028-4246-8fb6-0b0d17a9e61f",
+      "name": "Webhook",
+      "webhookId": "adf227c9-8a25-4f00-ab5a-a569665c6176"
     },
     {
       "parameters": {
@@ -202,50 +193,16 @@
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [1392, 1104],
+      "position": [
+        1392,
+        1104
+      ],
       "id": "f6b65d29-d3c2-431c-ae58-129393abee4a",
       "name": "respond_json"
-    },
-    {
-      "parameters": {
-        "content": "## 設定區\n\n在 `config` 節點調整：\n\n- **targetDate**：預設抓「昨天」(yyyyMMdd)。\n  要補跑改成固定值，例如 `20260518`。\n- **targetYmd**：同一天的 `yyyy-MM-dd` 格式，\n  供分頁提前停止的判斷式使用，\n  改 targetDate 時**要一起改**。\n- **maxPages**：分頁上限，避免無限迴圈。\n- **outputDir**：目前流程直接回傳 JSON，\n  沒有寫檔，此欄位保留但未使用。",
-        "height": 360,
-        "width": 320,
-        "color": 4
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [160, 720],
-      "id": "47900296-b282-407a-9e45-7298554fcb58",
-      "name": "note_config"
-    },
-    {
-      "parameters": {
-        "content": "## Python 版資料處理\n\n`extract_project_id` 與 `filter_and_scrub`\n都是 **Python (Beta)** Code node。\n\n⚠️ n8n 的 Python 跑在 Pyodide (WASM)，\n**沒有網路能力**（無 requests、\n也無 JS 的 this.helpers.httpRequest），\n所以「發請求 + cursor 分頁」改由\n`fetch_executions` 的 HTTP Request\n內建 Pagination 負責。\n\n去個資：遞迴移除任何層級的\n`customerID` 與 `phone`，\n只比對完全相同的 key，\n不會誤刪 `phone_number`。",
-        "height": 420,
-        "width": 320,
-        "color": 3
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1104, 640],
-      "id": "617b88d1-ad10-4f41-a162-175ac300900b",
-      "name": "note_pii"
     }
   ],
   "pinData": {},
   "connections": {
-    "Webhook": {
-      "main": [
-        [
-          {
-            "node": "config",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "config": {
       "main": [
         [
@@ -272,29 +229,40 @@
       "main": [
         [
           {
-            "node": "fetch_executions",
+            "node": "fetch_executions_paged",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "fetch_executions": {
+    "fetch_executions_paged": {
       "main": [
         [
           {
-            "node": "filter_and_scrub",
+            "node": "scrub_pii",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "filter_and_scrub": {
+    "scrub_pii": {
       "main": [
         [
           {
             "node": "respond_json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "config",
             "type": "main",
             "index": 0
           }
