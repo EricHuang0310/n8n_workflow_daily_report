@@ -1,0 +1,300 @@
+{
+  "name": "ExecutionLog 下載與去個資",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-1200, 320],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a001",
+      "name": "manual_trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1200, 512],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a002",
+      "name": "schedule_trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1a00001-0000-4000-8000-000000000001",
+              "name": "n8nBaseUrl",
+              "value": "http://10.13.60.173:5670",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000002",
+              "name": "workflowId",
+              "value": "mvmIg3oo45ZM5B9A",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000003",
+              "name": "apiKey",
+              "value": "={{ $env.N8N_API_KEY || 'PUT_YOUR_N8N_API_KEY_HERE' }}",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000004",
+              "name": "targetDate",
+              "value": "={{ $now.toFormat('yyyyMMdd') }}",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000005",
+              "name": "outputDir",
+              "value": "/data/DailyLog",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000006",
+              "name": "timeoutMs",
+              "value": 60000,
+              "type": "number"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000007",
+              "name": "maxPages",
+              "value": 200,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-960, 416],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a003",
+      "name": "config"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.n8nBaseUrl }}/api/v1/workflows/{{ $json.workflowId }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "excludePinnedData",
+              "value": "true"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-API-KEY",
+              "value": "={{ $json.apiKey }}"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{ $json.timeoutMs }}"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-720, 416],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a004",
+      "name": "get_workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 對應 Python: build_execution_api_url() 中取 projectId 的部分。\n// 從 workflow 回應的 shared[0].projectId 取出 projectId，缺少就明確報錯。\nconst payload = $input.first().json;\n\nconst shared = payload.shared;\nif (!Array.isArray(shared) || shared.length === 0) {\n  throw new Error('workflow 回應缺少 shared 資料');\n}\n\nconst projectId = shared[0]?.projectId ?? '';\nif (!projectId) {\n  throw new Error('workflow 回應缺少 projectId');\n}\n\nreturn [{ json: { projectId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 416],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a005",
+      "name": "extract_project_id"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 對應 Python: fetch_execution_log() + fetch_one_page()\n// 以 cursor 自動分頁抓取 execution，抓取過程中同時做日期篩選，\n// 一旦看到早於目標日期的資料就提前停止分頁（API 以新到舊排序）。\nconst cfg = $('config').first().json;\nconst projectId = $input.first().json.projectId;\n\nconst baseUrl = String(cfg.n8nBaseUrl).replace(/\\/+$/, '');\nconst apiKey = cfg.apiKey;\nconst workflowId = cfg.workflowId;\nconst timeout = Number(cfg.timeoutMs) || 60000;\nconst maxPages = Number(cfg.maxPages) || 200;\n\nconst targetDate = String(cfg.targetDate || '');\nconst targetYmd = targetDate\n  ? `${targetDate.slice(0, 4)}-${targetDate.slice(4, 6)}-${targetDate.slice(6, 8)}`\n  : null;\n\nconst baseExecUrl =\n  `${baseUrl}/api/v1/executions?includeData=true` +\n  `&workflowId=${encodeURIComponent(workflowId)}` +\n  `&projectId=${encodeURIComponent(projectId)}`;\n\nconst allExecutions = [];\nlet url = baseExecUrl;\nlet page = 1;\nlet stoppedEarly = false;\n\nwhile (page <= maxPages) {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url,\n    headers: { 'X-N8N-API-KEY': apiKey, accept: 'application/json' },\n    json: true,\n    timeout,\n  });\n\n  const executions = Array.isArray(resp?.data) ? resp.data : [];\n\n  let stopPaging = false;\n  for (const ex of executions) {\n    const dateYmd = String(ex?.startedAt ?? '').slice(0, 10);\n\n    if (targetYmd) {\n      if (dateYmd === targetYmd) {\n        allExecutions.push(ex);\n      } else if (dateYmd && dateYmd < targetYmd) {\n        stopPaging = true;\n      }\n    } else {\n      allExecutions.push(ex);\n    }\n  }\n\n  if (stopPaging) {\n    stoppedEarly = true;\n    break;\n  }\n\n  const nextCursor = resp?.nextCursor;\n  if (!nextCursor) {\n    break;\n  }\n\n  url = `${baseExecUrl}&cursor=${encodeURIComponent(nextCursor)}`;\n  page += 1;\n}\n\nreturn [\n  {\n    json: {\n      data: allExecutions,\n      stats: {\n        targetDate,\n        pagesFetched: page,\n        stoppedEarly,\n        total: allExecutions.length,\n      },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-240, 416],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a006",
+      "name": "fetch_executions_paged"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 對應 Python: scrub_pii()\n// customerID / phone 散落在 receive_message_API、extract_intent、\n// receive_confirmation 等 20 多個節點，因此以「key 名稱」為準遞迴清除，\n// 而不是只清單一條路徑，才能確保完整去個資。\nconst PII_KEYS = new Set(['customerID', 'phone']);\n\nlet removed = 0;\n\nfunction scrubPii(obj) {\n  if (Array.isArray(obj)) {\n    for (const item of obj) scrubPii(item);\n    return obj;\n  }\n  if (obj !== null && typeof obj === 'object') {\n    for (const key of Object.keys(obj)) {\n      if (PII_KEYS.has(key)) {\n        delete obj[key];\n        removed += 1;\n      } else {\n        scrubPii(obj[key]);\n      }\n    }\n  }\n  return obj;\n}\n\nconst input = $input.first().json;\n// 先深拷貝再清除，避免就地改動上游節點的資料。\nconst data = scrubPii(JSON.parse(JSON.stringify(input.data ?? [])));\n\nreturn [\n  {\n    json: {\n      data,\n      stats: {\n        ...(input.stats ?? {}),\n        piiKeysRemoved: removed,\n        piiKeys: [...PII_KEYS],\n      },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 416],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a007",
+      "name": "scrub_pii"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 對應 Python: json.dump(data, f, ensure_ascii=False, indent=2)\n// 產生與原腳本完全相同的檔案內容：最外層只有 {\"data\": [...]}。\nconst cfg = $('config').first().json;\nconst input = $input.first().json;\n\nconst targetDate = String(cfg.targetDate || '');\nconst outputDir = String(cfg.outputDir || '.').replace(/\\/+$/, '');\nconst fileName = `VoiceBotServiceLog_${targetDate}.json`;\nconst outputPath = `${outputDir}/${fileName}`;\n\n// JSON.stringify 預設輸出原始 UTF-8 字元，等同 ensure_ascii=False。\nconst content = JSON.stringify({ data: input.data ?? [] }, null, 2);\n\nconst binary = await this.helpers.prepareBinaryData(\n  Buffer.from(content, 'utf8'),\n  fileName,\n  'application/json',\n);\n\nreturn [\n  {\n    json: {\n      fileName,\n      outputPath,\n      stats: input.stats ?? {},\n    },\n    binary: { data: binary },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 416],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a008",
+      "name": "build_json_file"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.outputPath }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [480, 416],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a009",
+      "name": "write_log_file"
+    },
+    {
+      "parameters": {
+        "content": "## 設定區\n\n在 `config` 節點調整：\n\n- **apiKey**：預設讀環境變數 `N8N_API_KEY`。\n  請勿把金鑰直接寫死在流程裡。\n- **targetDate**：預設今天 (yyyyMMdd)。\n  要補跑改成固定值，例如 `20260518`。\n- **outputDir**：檔案輸出目錄，\n  需為 **n8n 容器內** 可寫入的路徑。\n- **maxPages**：分頁上限，避免無限迴圈。",
+        "height": 340,
+        "width": 320,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-976, 32],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a010",
+      "name": "note_config"
+    },
+    {
+      "parameters": {
+        "content": "## 去個資\n\n遞迴掃描整份 execution，移除任何層級的\n`customerID` 與 `phone`。\n\n個資散落在 receive_message_API、\nextract_intent、receive_confirmation…\n等 20 多個節點，只清單一條路徑\n會有大量殘留，因此以 key 名稱清除。\n\n只比對**完全相同**的 key，\n不會誤刪 `phone_number` 等欄位。",
+        "height": 320,
+        "width": 300,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-16, 32],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a011",
+      "name": "note_pii"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "manual_trigger": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "schedule_trigger": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "config": {
+      "main": [
+        [
+          {
+            "node": "get_workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_workflow": {
+      "main": [
+        [
+          {
+            "node": "extract_project_id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract_project_id": {
+      "main": [
+        [
+          {
+            "node": "fetch_executions_paged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch_executions_paged": {
+      "main": [
+        [
+          {
+            "node": "scrub_pii",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "scrub_pii": {
+      "main": [
+        [
+          {
+            "node": "build_json_file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "build_json_file": {
+      "main": [
+        [
+          {
+            "node": "write_log_file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8c4b1e26-77a9-4d3f-b0c5-1e9a4d2f6b31",
+  "meta": {
+    "instanceId": "fe26821710278485f22df0b81a3eabf417c0386d449cacfa06eb7232055bce44"
+  },
+  "id": "VoiceBotLogFetch01",
+  "tags": []
+}
