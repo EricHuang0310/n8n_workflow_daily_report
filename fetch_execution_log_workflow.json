@@ -50,8 +50,14 @@
             {
               "id": "c1a00001-0000-4000-8000-000000000004",
               "name": "targetDate",
-              "value": "={{ $now.toFormat('yyyyMMdd') }}",
+              "value": "={{ ($json.query || {}).date || $now.toFormat('yyyyMMdd') }}",
               "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000008",
+              "name": "viaWebhook",
+              "value": "={{ ($json.query || null) !== null }}",
+              "type": "boolean"
             },
             {
               "id": "c1a00001-0000-4000-8000-000000000005",
@@ -158,6 +164,70 @@
     },
     {
       "parameters": {
+        "httpMethod": "GET",
+        "path": "voicebot-log",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1200, 704],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a012",
+      "name": "webhook_download"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d2b00001-0000-4000-8000-000000000001",
+              "leftValue": "={{ $('config').first().json.viaWebhook }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [480, 416],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a013",
+      "name": "route_output"
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Disposition",
+                "value": "=attachment; filename=\"{{ $json.fileName }}\""
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [720, 320],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a014",
+      "name": "respond_download"
+    },
+    {
+      "parameters": {
         "operation": "write",
         "fileName": "={{ $json.outputPath }}",
         "dataPropertyName": "data",
@@ -165,7 +235,7 @@
       },
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
-      "position": [480, 416],
+      "position": [720, 512],
       "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a009",
       "name": "write_log_file"
     },
@@ -194,6 +264,19 @@
       "position": [-16, 32],
       "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a011",
       "name": "note_pii"
+    },
+    {
+      "parameters": {
+        "content": "## 輸出去向\n\n**排程 / 手動觸發** → `write_log_file`\n寫到 **n8n 伺服器**的 `outputDir`，\n不是你的電腦。\n\n**Webhook 觸發** → `respond_download`\n直接把檔案回傳給呼叫端，\n本機即可下載到 `D:\\...`：\n\n```\nGET http://10.13.60.173:5670\n    /webhook/voicebot-log?date=20260518\n```\n\n⚠️ Webhook 預設沒有驗證，\n正式環境請在 webhook 節點加\nHeader Auth credential。",
+        "height": 420,
+        "width": 340,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [464, 32],
+      "id": "3f1c9a02-51d4-4b7e-9a10-0c2e5b71a015",
+      "name": "note_output"
     }
   ],
   "pinData": {},
@@ -277,6 +360,35 @@
     },
     "build_json_file": {
       "main": [
+        [
+          {
+            "node": "route_output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook_download": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "route_output": {
+      "main": [
+        [
+          {
+            "node": "respond_download",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "write_log_file",
