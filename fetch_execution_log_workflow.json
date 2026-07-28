@@ -1,0 +1,277 @@
+{
+  "name": "ExecutionLog 下載與去個資",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1a00001-0000-4000-8000-000000000001",
+              "name": "n8nBaseUrl",
+              "value": "http://10.13.60.173:5670",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000002",
+              "name": "workflowId",
+              "value": "mvmIg3oo45ZM5B9A",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000003",
+              "name": "apiKey",
+              "value": "=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlNGNmZjQ1ZS0zYjgyLTQ5ODUtOTcxYy1jNjczZWFmYzdhMGYiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzgyNzk5MDU2fQ.fjBOqx9LPvw2KKoiJMLZlPUNfk1AnKgvo02OZN4gSDk",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000004",
+              "name": "targetDate",
+              "value": "=",
+              "type": "string"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000006",
+              "name": "timeoutMs",
+              "value": 60000,
+              "type": "number"
+            },
+            {
+              "id": "c1a00001-0000-4000-8000-000000000007",
+              "name": "maxPages",
+              "value": 200,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        176,
+        1104
+      ],
+      "id": "dc33754d-a644-4efd-909f-bef8f898a3b2",
+      "name": "config"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.n8nBaseUrl }}/api/v1/workflows/{{ $json.workflowId }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "excludePinnedData",
+              "value": "true"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-N8N-API-KEY",
+              "value": "={{ $json.apiKey }}"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{ $json.timeoutMs }}"
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        416,
+        1104
+      ],
+      "id": "b63e4433-6123-4156-a613-75ed040c01c8",
+      "name": "get_workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 對應 Python: build_execution_api_url() 中取 projectId 的部分。\n// 從 workflow 回應的 shared[0].projectId 取出 projectId，缺少就明確報錯。\nconst payload = $input.first().json;\n\nconst shared = payload.shared;\nif (!Array.isArray(shared) || shared.length === 0) {\n  throw new Error('workflow 回應缺少 shared 資料');\n}\n\nconst projectId = shared[0]?.projectId ?? '';\nif (!projectId) {\n  throw new Error('workflow 回應缺少 projectId');\n}\n\nreturn [{ json: { projectId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        1104
+      ],
+      "id": "c099cf11-25b5-46df-ae48-7dd365635d31",
+      "name": "extract_project_id"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 對應 Python: fetch_execution_log() + fetch_one_page()\n// 以 cursor 自動分頁抓取 execution，抓取過程中同時做日期篩選，\n// 一旦看到早於目標日期的資料就提前停止分頁（API 以新到舊排序）。\n//\n// 重點：每筆 execution 都會挾帶一份完整的 workflow 定義 (workflowData)，\n// 佔整體回應約 85%（實測每筆 53KB → 8KB）。報表完全用不到，\n// 因此在收到當下就丟掉，避免把幾十 MB 累積在記憶體裡。\nconst cfg = $('config').first().json;\nconst projectId = $input.first().json.projectId;\n\nconst baseUrl = String(cfg.n8nBaseUrl).replace(/\\/+$/, '');\nconst apiKey = cfg.apiKey;\nconst workflowId = cfg.workflowId;\nconst timeout = Number(cfg.timeoutMs) || 60000;\nconst maxPages = Number(cfg.maxPages) || 200;\n\nconst targetDate = String(cfg.targetDate || '');\nconst targetYmd = targetDate\n  ? `${targetDate.slice(0, 4)}-${targetDate.slice(4, 6)}-${targetDate.slice(6, 8)}`\n  : null;\n\nconst baseExecUrl =\n  `${baseUrl}/api/v1/executions?includeData=true` +\n  `&workflowId=${encodeURIComponent(workflowId)}` +\n  `&projectId=${encodeURIComponent(projectId)}`;\n\n/** 只保留報表需要的欄位，丟掉 workflowData 與 n8n 內部執行狀態。 */\nfunction slim(ex) {\n  delete ex.workflowData;\n  if (ex.data) {\n    delete ex.data.executionData;\n  }\n  return ex;\n}\n\nconst allExecutions = [];\nlet url = baseExecUrl;\nlet page = 1;\nlet stoppedEarly = false;\n\nwhile (page <= maxPages) {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url,\n    headers: { 'X-N8N-API-KEY': apiKey, accept: 'application/json' },\n    json: true,\n    timeout,\n  });\n\n  const executions = Array.isArray(resp?.data) ? resp.data : [];\n\n  let stopPaging = false;\n  for (const ex of executions) {\n    const dateYmd = String(ex?.startedAt ?? '').slice(0, 10);\n\n    if (targetYmd) {\n      if (dateYmd === targetYmd) {\n        allExecutions.push(slim(ex));\n      } else if (dateYmd && dateYmd < targetYmd) {\n        stopPaging = true;\n      }\n    } else {\n      allExecutions.push(slim(ex));\n    }\n  }\n\n  if (stopPaging) {\n    stoppedEarly = true;\n    break;\n  }\n\n  const nextCursor = resp?.nextCursor;\n  if (!nextCursor) {\n    break;\n  }\n\n  url = `${baseExecUrl}&cursor=${encodeURIComponent(nextCursor)}`;\n  page += 1;\n}\n\nreturn [\n  {\n    json: {\n      data: allExecutions,\n      stats: {\n        targetDate,\n        pagesFetched: page,\n        stoppedEarly,\n        total: allExecutions.length,\n      },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        1104
+      ],
+      "id": "640c7024-5219-42b1-9636-b57d64161904",
+      "name": "fetch_executions_paged"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 對應 Python: scrub_pii()\n// customerID / phone 散落在 receive_message_API、extract_intent、\n// receive_confirmation 等 20 多個節點，因此以「key 名稱」為準遞迴清除，\n// 而不是只清單一條路徑，才能確保完整去個資。\n//\n// 註：上游 fetch_executions_paged 已把 workflowData 移除，這裡的資料\n// 本來就是該節點自己從 API 組出來的，故直接就地清除即可。\n// 不再做 JSON.parse(JSON.stringify(...)) 深拷貝 —— 資料量大時\n// 那一步會整份多序列化一次，是壓力測試下的主要瓶頸之一。\nconst PII_KEYS = new Set(['customerID', 'phone']);\n\nlet removed = 0;\n\nfunction scrubPii(obj) {\n  if (Array.isArray(obj)) {\n    for (const item of obj) scrubPii(item);\n    return obj;\n  }\n  if (obj !== null && typeof obj === 'object') {\n    for (const key of Object.keys(obj)) {\n      if (PII_KEYS.has(key)) {\n        delete obj[key];\n        removed += 1;\n      } else {\n        scrubPii(obj[key]);\n      }\n    }\n  }\n  return obj;\n}\n\nconst input = $input.first().json;\nconst data = scrubPii(input.data ?? []);\n\nreturn [\n  {\n    json: {\n      data,\n      stats: {\n        ...(input.stats ?? {}),\n        piiKeysRemoved: removed,\n        piiKeys: [...PII_KEYS],\n      },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        1104
+      ],
+      "id": "4ecc85c0-7210-4867-909d-61cc6a95bf71",
+      "name": "scrub_pii"
+    },
+    {
+      "parameters": {
+        "content": "## 設定區\n\n在 `config` 節點調整：\n\n- **targetDate**：`yyyyMMdd`。\n  **留空 = 不篩日期、抓全部**\n  （壓力測試用，正式請填日期）。\n- **maxPages**：分頁上限。\n- **timeoutMs**：單次 API 請求逾時 (毫秒)。",
+        "height": 340,
+        "width": 320,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        720
+      ],
+      "id": "47900296-b282-407a-9e45-7298554fcb58",
+      "name": "note_config"
+    },
+    {
+      "parameters": {
+        "content": "## 瘦身 + 去個資\n\n**瘦身**：每筆 execution 都挾帶一份完整\nworkflow 定義 (`workflowData`)，\n實測佔整體 **85%**（53KB → 8KB/筆）。\n報表用不到，於抓取當下即丟棄。\n\n**去個資**：遞迴移除任何層級的\n`customerID` 與 `phone`，只比對\n完全相同的 key，不會誤刪 `phone_number`。",
+        "height": 360,
+        "width": 300,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        720
+      ],
+      "id": "617b88d1-ad10-4f41-a162-175ac300900b",
+      "name": "note_pii"
+    },
+    {
+      "parameters": {
+        "path": "get-execution-log",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -64,
+        1104
+      ],
+      "id": "cf962e2b-7028-4246-8fb6-0b0d17a9e61f",
+      "name": "Webhook",
+      "webhookId": "adf227c9-8a25-4f00-ab5a-a569665c6176"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"data\": $json.data } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1392,
+        1104
+      ],
+      "id": "f6b65d29-d3c2-431c-ae58-129393abee4a",
+      "name": "respond_json"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "config": {
+      "main": [
+        [
+          {
+            "node": "get_workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_workflow": {
+      "main": [
+        [
+          {
+            "node": "extract_project_id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extract_project_id": {
+      "main": [
+        [
+          {
+            "node": "fetch_executions_paged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch_executions_paged": {
+      "main": [
+        [
+          {
+            "node": "scrub_pii",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "scrub_pii": {
+      "main": [
+        [
+          {
+            "node": "respond_json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9eba1328-3611-46e2-b04b-1e1728ee97c8",
+  "meta": {
+    "instanceId": "7920eeefcb35cab187049ee0bfae6040264055cadff9e01e94cdc782126a4fbf"
+  },
+  "id": "uRNDkei4RqFbjmV0",
+  "tags": []
+}

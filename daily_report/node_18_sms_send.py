@@ -132,16 +132,6 @@ def extract(execution: dict) -> dict | None:
         run_data, "return_SMS", "receive_confirmation_message"
     )
 
-    # 取得實際發送的手機號碼 (若有)
-    phone_number = None
-    set_phone_out = get_node_output(run_data, "set_phone")
-    if set_phone_out:
-        phone_number = set_phone_out.get("phone_number")
-    elif node_was_executed(run_data, "set_other_phone"):
-        set_other = get_node_output(run_data, "set_other_phone")
-        if set_other:
-            phone_number = set_other.get("phone_number")
-
     return {
         "node": "18.說答案後發送訊息(SMS)",
         "entered": True,
@@ -152,7 +142,6 @@ def extract(execution: dict) -> dict | None:
         "accept_status": accept,                # accept / reject / replay
         "phone_choice": phone_choice,           # bank / spoken
         "sms_send_result": send_result,         # success / fail
-        "phone_number_used": phone_number,
         "stay_duration_sec": stay_duration_sec,
         "execution_time_ms": get_node_execution_time(run_data, "SMS_response"),
     }
