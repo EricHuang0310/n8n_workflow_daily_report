@@ -26,13 +26,7 @@
             {
               "id": "c1a00001-0000-4000-8000-000000000004",
               "name": "targetDate",
-              "value": "={{ $today.minus(1,'days').format('yyyyMMdd') }}",
-              "type": "string"
-            },
-            {
-              "id": "c1a00001-0000-4000-8000-000000000005",
-              "name": "outputDir",
-              "value": "D:\\03_客服語音機器人\\n8n_webhook_log_output",
+              "value": "=",
               "type": "string"
             },
             {
@@ -113,7 +107,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// 對應 Python: fetch_execution_log() + fetch_one_page()\n// 以 cursor 自動分頁抓取 execution，抓取過程中同時做日期篩選，\n// 一旦看到早於目標日期的資料就提前停止分頁（API 以新到舊排序）。\nconst cfg = $('config').first().json;\nconst projectId = $input.first().json.projectId;\n\nconst baseUrl = String(cfg.n8nBaseUrl).replace(/\\/+$/, '');\nconst apiKey = cfg.apiKey;\nconst workflowId = cfg.workflowId;\nconst timeout = Number(cfg.timeoutMs) || 60000;\nconst maxPages = Number(cfg.maxPages) || 200;\n\nconst targetDate = String(cfg.targetDate || '');\nconst targetYmd = targetDate\n  ? `${targetDate.slice(0, 4)}-${targetDate.slice(4, 6)}-${targetDate.slice(6, 8)}`\n  : null;\n\nconst baseExecUrl =\n  `${baseUrl}/api/v1/executions?includeData=true` +\n  `&workflowId=${encodeURIComponent(workflowId)}` +\n  `&projectId=${encodeURIComponent(projectId)}`;\n\nconst allExecutions = [];\nlet url = baseExecUrl;\nlet page = 1;\nlet stoppedEarly = false;\n\nwhile (page <= maxPages) {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url,\n    headers: { 'X-N8N-API-KEY': apiKey, accept: 'application/json' },\n    json: true,\n    timeout,\n  });\n\n  const executions = Array.isArray(resp?.data) ? resp.data : [];\n\n  let stopPaging = false;\n  for (const ex of executions) {\n    const dateYmd = String(ex?.startedAt ?? '').slice(0, 10);\n\n    if (targetYmd) {\n      if (dateYmd === targetYmd) {\n        allExecutions.push(ex);\n      } else if (dateYmd && dateYmd < targetYmd) {\n        stopPaging = true;\n      }\n    } else {\n      allExecutions.push(ex);\n    }\n  }\n\n  if (stopPaging) {\n    stoppedEarly = true;\n    break;\n  }\n\n  const nextCursor = resp?.nextCursor;\n  if (!nextCursor) {\n    break;\n  }\n\n  url = `${baseExecUrl}&cursor=${encodeURIComponent(nextCursor)}`;\n  page += 1;\n}\n\nreturn [\n  {\n    json: {\n      data: allExecutions,\n      stats: {\n        targetDate,\n        pagesFetched: page,\n        stoppedEarly,\n        total: allExecutions.length,\n      },\n    },\n  },\n];"
+        "jsCode": "// 對應 Python: fetch_execution_log() + fetch_one_page()\n// 以 cursor 自動分頁抓取 execution，抓取過程中同時做日期篩選，\n// 一旦看到早於目標日期的資料就提前停止分頁（API 以新到舊排序）。\n//\n// 重點：每筆 execution 都會挾帶一份完整的 workflow 定義 (workflowData)，\n// 佔整體回應約 85%（實測每筆 53KB → 8KB）。報表完全用不到，\n// 因此在收到當下就丟掉，避免把幾十 MB 累積在記憶體裡。\nconst cfg = $('config').first().json;\nconst projectId = $input.first().json.projectId;\n\nconst baseUrl = String(cfg.n8nBaseUrl).replace(/\\/+$/, '');\nconst apiKey = cfg.apiKey;\nconst workflowId = cfg.workflowId;\nconst timeout = Number(cfg.timeoutMs) || 60000;\nconst maxPages = Number(cfg.maxPages) || 200;\n\nconst targetDate = String(cfg.targetDate || '');\nconst targetYmd = targetDate\n  ? `${targetDate.slice(0, 4)}-${targetDate.slice(4, 6)}-${targetDate.slice(6, 8)}`\n  : null;\n\nconst baseExecUrl =\n  `${baseUrl}/api/v1/executions?includeData=true` +\n  `&workflowId=${encodeURIComponent(workflowId)}` +\n  `&projectId=${encodeURIComponent(projectId)}`;\n\n/** 只保留報表需要的欄位，丟掉 workflowData 與 n8n 內部執行狀態。 */\nfunction slim(ex) {\n  delete ex.workflowData;\n  if (ex.data) {\n    delete ex.data.executionData;\n  }\n  return ex;\n}\n\nconst allExecutions = [];\nlet url = baseExecUrl;\nlet page = 1;\nlet stoppedEarly = false;\n\nwhile (page <= maxPages) {\n  const resp = await this.helpers.httpRequest({\n    method: 'GET',\n    url,\n    headers: { 'X-N8N-API-KEY': apiKey, accept: 'application/json' },\n    json: true,\n    timeout,\n  });\n\n  const executions = Array.isArray(resp?.data) ? resp.data : [];\n\n  let stopPaging = false;\n  for (const ex of executions) {\n    const dateYmd = String(ex?.startedAt ?? '').slice(0, 10);\n\n    if (targetYmd) {\n      if (dateYmd === targetYmd) {\n        allExecutions.push(slim(ex));\n      } else if (dateYmd && dateYmd < targetYmd) {\n        stopPaging = true;\n      }\n    } else {\n      allExecutions.push(slim(ex));\n    }\n  }\n\n  if (stopPaging) {\n    stoppedEarly = true;\n    break;\n  }\n\n  const nextCursor = resp?.nextCursor;\n  if (!nextCursor) {\n    break;\n  }\n\n  url = `${baseExecUrl}&cursor=${encodeURIComponent(nextCursor)}`;\n  page += 1;\n}\n\nreturn [\n  {\n    json: {\n      data: allExecutions,\n      stats: {\n        targetDate,\n        pagesFetched: page,\n        stoppedEarly,\n        total: allExecutions.length,\n      },\n    },\n  },\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -126,7 +120,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// 對應 Python: scrub_pii()\n// customerID / phone 散落在 receive_message_API、extract_intent、\n// receive_confirmation 等 20 多個節點，因此以「key 名稱」為準遞迴清除，\n// 而不是只清單一條路徑，才能確保完整去個資。\nconst PII_KEYS = new Set(['customerID', 'phone']);\n\nlet removed = 0;\n\nfunction scrubPii(obj) {\n  if (Array.isArray(obj)) {\n    for (const item of obj) scrubPii(item);\n    return obj;\n  }\n  if (obj !== null && typeof obj === 'object') {\n    for (const key of Object.keys(obj)) {\n      if (PII_KEYS.has(key)) {\n        delete obj[key];\n        removed += 1;\n      } else {\n        scrubPii(obj[key]);\n      }\n    }\n  }\n  return obj;\n}\n\nconst input = $input.first().json;\n// 先深拷貝再清除，避免就地改動上游節點的資料。\nconst data = scrubPii(JSON.parse(JSON.stringify(input.data ?? [])));\n\nreturn [\n  {\n    json: {\n      data,\n      stats: {\n        ...(input.stats ?? {}),\n        piiKeysRemoved: removed,\n        piiKeys: [...PII_KEYS],\n      },\n    },\n  },\n];"
+        "jsCode": "// 對應 Python: scrub_pii()\n// customerID / phone 散落在 receive_message_API、extract_intent、\n// receive_confirmation 等 20 多個節點，因此以「key 名稱」為準遞迴清除，\n// 而不是只清單一條路徑，才能確保完整去個資。\n//\n// 註：上游 fetch_executions_paged 已把 workflowData 移除，這裡的資料\n// 本來就是該節點自己從 API 組出來的，故直接就地清除即可。\n// 不再做 JSON.parse(JSON.stringify(...)) 深拷貝 —— 資料量大時\n// 那一步會整份多序列化一次，是壓力測試下的主要瓶頸之一。\nconst PII_KEYS = new Set(['customerID', 'phone']);\n\nlet removed = 0;\n\nfunction scrubPii(obj) {\n  if (Array.isArray(obj)) {\n    for (const item of obj) scrubPii(item);\n    return obj;\n  }\n  if (obj !== null && typeof obj === 'object') {\n    for (const key of Object.keys(obj)) {\n      if (PII_KEYS.has(key)) {\n        delete obj[key];\n        removed += 1;\n      } else {\n        scrubPii(obj[key]);\n      }\n    }\n  }\n  return obj;\n}\n\nconst input = $input.first().json;\nconst data = scrubPii(input.data ?? []);\n\nreturn [\n  {\n    json: {\n      data,\n      stats: {\n        ...(input.stats ?? {}),\n        piiKeysRemoved: removed,\n        piiKeys: [...PII_KEYS],\n      },\n    },\n  },\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -139,7 +133,7 @@
     },
     {
       "parameters": {
-        "content": "## 設定區\n\n在 `config` 節點調整：\n\n- **targetDate**：預設抓「昨天」(yyyyMMdd)。\n  要補跑改成固定值，例如 `20260518`。\n- **maxPages**：分頁上限，避免無限迴圈。\n- **timeoutMs**：單次 API 請求逾時 (毫秒)。\n- **outputDir**：目前流程直接回傳 JSON、\n  沒有寫檔節點，此欄位保留但未使用。",
+        "content": "## 設定區\n\n在 `config` 節點調整：\n\n- **targetDate**：`yyyyMMdd`。\n  **留空 = 不篩日期、抓全部**\n  （壓力測試用，正式請填日期）。\n- **maxPages**：分頁上限。\n- **timeoutMs**：單次 API 請求逾時 (毫秒)。",
         "height": 340,
         "width": 320,
         "color": 4
@@ -155,8 +149,8 @@
     },
     {
       "parameters": {
-        "content": "## 去個資 (JavaScript)\n\n遞迴掃描整份 execution，移除任何層級的\n`customerID` 與 `phone`。\n\n個資散落在 receive_message_API、\nextract_intent、receive_confirmation…\n等 20 多個節點，只清單一條路徑\n會有大量殘留，因此以 key 名稱清除。\n\n只比對**完全相同**的 key，\n不會誤刪 `phone_number` 等欄位。",
-        "height": 320,
+        "content": "## 瘦身 + 去個資\n\n**瘦身**：每筆 execution 都挾帶一份完整\nworkflow 定義 (`workflowData`)，\n實測佔整體 **85%**（53KB → 8KB/筆）。\n報表用不到，於抓取當下即丟棄。\n\n**去個資**：遞迴移除任何層級的\n`customerID` 與 `phone`，只比對\n完全相同的 key，不會誤刪 `phone_number`。",
+        "height": 360,
         "width": 300,
         "color": 3
       },
@@ -274,7 +268,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "3b86cdfc-b1ba-4d17-9810-ad47d7299cff",
+  "versionId": "9eba1328-3611-46e2-b04b-1e1728ee97c8",
   "meta": {
     "instanceId": "7920eeefcb35cab187049ee0bfae6040264055cadff9e01e94cdc782126a4fbf"
   },
